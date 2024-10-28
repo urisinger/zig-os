@@ -2,7 +2,23 @@ const std = @import("std");
 const log = std.log;
 const builtin = @import("builtin");
 
-pub const PAGE_SIZE = 4096;
+// 4kb
+pub const PAGE_SIZE = KB(4);
+
+// 2mb
+pub const LARGE_PAGE_SIZE = MB(2);
+
+pub fn MB(mb: u64) u64 {
+    return mb * 0x100000;
+}
+
+pub fn KB(kb: u64) u64 {
+    return kb * 0x400;
+}
+
+pub inline fn div_up(lhs: u64, rhs: u64) u64 {
+    return (lhs - 1 + rhs) / rhs;
+}
 
 pub inline fn done() noreturn {
     while (true) {
