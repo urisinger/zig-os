@@ -65,8 +65,6 @@ pub fn free(_: *anyopaque, buf: []u8, _: u8, _: usize) void {
     for (0..num_pages) |page_index| {
         const page_vaddr = start_addr + page_index * utils.PAGE_SIZE;
 
-        buf[0] = 3;
-
         const phys_page = paging.get_paddr(@bitCast(page_vaddr)) catch unreachable;
 
         pmm.free_page(phys_page) catch unreachable;

@@ -291,12 +291,12 @@ const PageMapping = extern struct {
             return Error.EntryNotPresent;
         }
         const pd: *const PageMapping = @ptrFromInt(pdp.mappings[vaddr.pdp_idx].get_addr() + hhdm_offset);
-        if (!pdp.mappings[vaddr.pml4_idx].present) {
+        if (!pdp.mappings[vaddr.pdp_idx].present) {
             log.err("pdp entery not present: {}", .{vaddr.pdp_idx});
             return Error.EntryNotPresent;
         }
         const pt: *const PageMapping = @ptrFromInt(pd.mappings[vaddr.pd_idx].get_addr() + hhdm_offset);
-        if (!pd.mappings[vaddr.pml4_idx].present) {
+        if (!pd.mappings[vaddr.pd_idx].present) {
             log.err("pd entery not present: {}", .{vaddr.pd_idx});
             return Error.EntryNotPresent;
         }
