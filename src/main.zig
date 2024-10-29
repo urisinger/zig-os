@@ -20,11 +20,12 @@ pub const os = @import("os.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
-    .log_level = .info,
+    .log_level = .debug,
 };
 
 export fn _start() callconv(.C) noreturn {
     logger.init();
+
     boot.init() catch @panic("failed to init boot params");
 
     memory.init();

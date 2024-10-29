@@ -1,6 +1,9 @@
+/.zig-cache
+/zig-cache
+/zig-out
+/iso_root
 /limine
-/ovmf-aarch64
-/ovmf-riscv64
-/ovmf-x86_64
-*.iso
-*.hdd
+/ovmf-*
+/*.iso
+/*.hdd
+

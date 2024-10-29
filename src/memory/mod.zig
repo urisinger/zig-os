@@ -17,6 +17,7 @@ var heap_end: u64 = 0;
 pub fn init() void {
     pmm.init() catch @panic("failed to init");
 
+    log.debug("jo", .{});
     paging.init() catch |err| {
         log.err("paging.init error: {}", .{err});
         @panic("failed to init paging {}");
