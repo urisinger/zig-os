@@ -92,7 +92,7 @@ pub fn build(b: *std.Build) !void {
     run_hdd.dependOn(try runHddStep(b, &kernel_step.step, &build_limine.step, &download_ovmf.step, arch));
 
     const run_iso = b.step("run-iso", "Run the iso image in QEMU");
-    run_iso.dependOn(try runIsoStep(b, &kernel_step.step, &build_limine.step, &download_ovmf.step, arch));
+    run_iso.dependOn(try runIsoStep(b, kernel_step, &build_limine.step, &download_ovmf.step, arch));
 
     const run_step = b.step("run", "Run the app in QEMU");
 
@@ -101,7 +101,7 @@ pub fn build(b: *std.Build) !void {
 
 fn runIsoStep(
     b: *std.Build,
-    kernel_step: *std.Build.Step,
+    kernel_build: *std.Build.Step.InstallArtifact,
     build_limine: *std.Build.Step,
     download_ovmf: *std.Build.Step,
     arch: std.Target.Cpu.Arch,
@@ -123,11 +123,13 @@ fn runIsoStep(
     const copy_kernel = b.addSystemCommand(&.{
         "cp",
         "-v",
-        "zig-out/bin/kernel",
     });
 
+    copy_kernel.addFileArg(kernel_build.emitted_bin.?);
+
+    copy_kernel.addArg(iso_root ++ "/boot/");
+
     copy_kernel.step.dependOn(&create_iso_dirs.step);
-    copy_kernel.step.dependOn(kernel_step);
 
     const copy_limine = b.addSystemCommand(&.{
         "cp",
@@ -162,6 +164,10 @@ fn runIsoStep(
     create_iso.step.dependOn(&copy_kernel.step);
     create_iso.step.dependOn(&copy_limine.step);
 
+    const iso_step = b.step("iso", "Create ISO image");
+
+    iso_step.dependOn(&create_iso.step);
+
     switch (arch) {
         .x86_64 => {
             copy_efi_loader.addArgs(&.{ "limine/BOOTX64.EFI", "limine/BOOTIA32.EFI", iso_root ++ "/EFI/BOOT/" });
@@ -170,26 +176,21 @@ fn runIsoStep(
 
             const bios_install = b.addSystemCommand(&.{ "./limine/limine", "bios-install", image_name ++ ".iso" });
 
-            bios_install.step.dependOn(&create_iso_dirs.step);
-            create_iso.step.dependOn(&bios_install.step);
+            bios_install.step.dependOn(&create_iso.step);
+            iso_step.dependOn(&bios_install.step);
         },
         .aarch64 => {
-            copy_kernel.addArg("limine/BOOTAA64.EFI");
+            copy_efi_loader.addArg("limine/BOOTAA64.EFI");
             create_iso.addArg(iso_root ++ "/EFI/BOOT/BOOTAA64.EFI");
         },
         .riscv64 => {
-            copy_kernel.addArg("limine/BOOTRISCV64.EFI");
+            copy_efi_loader.addArg("limine/BOOTRISCV64.EFI");
             create_iso.addArg(iso_root ++ "/EFI/BOOT/BOOTRISCV64.EFI");
         },
         else => std.debug.panic("Unsupported architecture: {s}", .{@tagName(arch)}),
     }
 
-    copy_kernel.addArg(iso_root ++ "/boot/");
     copy_limine.addArg(iso_root ++ "/boot/limine/");
-
-    const iso_step = b.step("iso", "Create ISO image");
-
-    iso_step.dependOn(&create_iso.step);
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
