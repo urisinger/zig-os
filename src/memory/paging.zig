@@ -123,20 +123,21 @@ inline fn set_cr3(pml4: u64) void {
     );
 }
 
-const ReadWrite = enum(u1) {
+pub const ReadWrite = enum(u1) {
     read_execute = 0,
     read_write = 1,
 };
-const UserSupervisor = enum(u1) {
+
+pub const UserSupervisor = enum(u1) {
     supervisor = 0,
     user = 1,
 };
-const PageSize = enum(u1) {
+pub const PageSize = enum(u1) {
     normal = 0,
     large = 1,
 };
 
-const MmapFlags = packed struct(u64) {
+pub const MmapFlags = packed struct(u64) {
     present: bool = false,
     read_write: ReadWrite = .read_write,
     user_supervisor: UserSupervisor = .supervisor,

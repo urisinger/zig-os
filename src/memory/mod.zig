@@ -35,8 +35,8 @@ pub const page_allocator: Allocator = Allocator{
     },
 };
 
-pub fn alloc(_: *anyopaque, len: usize, ptr_align: u8, _: usize) ?[*]u8 {
-    heap_end = align_up(u64, heap_end, @as(u64, 1) << @intCast(ptr_align));
+fn alloc(_: *anyopaque, len: usize, _: u8, _: usize) ?[*]u8 {
+    heap_end = align_up(u64, heap_end, utils.PAGE_SIZE);
 
     const num_pages = (len + utils.PAGE_SIZE - 1) / utils.PAGE_SIZE;
     const alloc_start = heap_end;
@@ -58,8 +58,7 @@ pub fn alloc(_: *anyopaque, len: usize, ptr_align: u8, _: usize) ?[*]u8 {
     return @ptrFromInt(alloc_start);
 }
 
-pub fn free(_: *anyopaque, buf: []u8, _: u8, _: usize) void {
-    log.info("called free", .{});
+fn free(_: *anyopaque, buf: []u8, _: u8, _: usize) void {
     const start_addr = @intFromPtr(buf.ptr);
     const num_pages = (buf.len + utils.PAGE_SIZE - 1) / utils.PAGE_SIZE;
 
