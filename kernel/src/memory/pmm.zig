@@ -90,7 +90,7 @@ pub fn init() !void {
         bitmap_vaddr[byte_index] &= ~(@as(u32, 1) << @intCast(bit_index));
     }
 
-    log.info("bitmaps succsefully initialized ", .{});
-
     allocator = BitmapAllocator{ .bitmap_ptr = bitmap_vaddr, .num_pages = num_pages };
+
+    log.info("initialized pmm", .{});
 }

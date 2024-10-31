@@ -60,26 +60,25 @@ pub const BitmapAllocator = struct {
                 }
 
                 if (word.* & (@as(u32, 1) << @intCast(bit_position)) != 0) {
-                    if (remaining_pages == num_pages) {
-                        start_page = (word_index * 32 + bit_position);
-                    }
                     remaining_pages -= 1;
 
                     if (remaining_pages == 0) {
-                        for (0..num_pages) |current_page| {
+                        for (start_page..start_page + num_pages) |current_page| {
                             const word_idx = current_page / 32;
                             const bit_idx = current_page % 32;
+
                             self.bitmap_ptr[word_idx] &= ~(@as(u32, 1) << @intCast(bit_idx));
                         }
                         return start_page * utils.PAGE_SIZE;
                     }
                 } else {
                     remaining_pages = num_pages;
+                    start_page = (word_index * 32 + bit_position + 1);
                 }
             }
         }
 
-        log.err("Failed to allocate block: No contiguous free pages available", .{});
+        log.err("Failed to allocate block: No {} contiguous free pages available", .{num_pages});
         return Error.NoFreePages;
     }
 

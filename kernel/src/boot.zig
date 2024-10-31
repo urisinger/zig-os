@@ -22,7 +22,7 @@ pub const BootParams = struct {
 
 pub var params: ?BootParams = null;
 
-pub fn init() !void {
+pub fn init() void {
     if (!base_revision.is_supported()) {
         @panic("limine revision not supported");
     }

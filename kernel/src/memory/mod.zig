@@ -34,7 +34,7 @@ fn alloc(_: *anyopaque, len: usize, _: u8, _: usize) ?[*]u8 {
     const num_pages = std.math.divCeil(usize, len, utils.PAGE_SIZE) catch unreachable;
 
     const alloc_start = vmm.allocate_page_block(num_pages) catch |err| {
-        log.err("Could not allocate physical page: {}", .{err});
+        log.err("Could not allocate virtual pages: {}", .{err});
         return null;
     };
 

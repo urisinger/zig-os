@@ -26,17 +26,11 @@ pub const std_options: std.Options = .{
 export fn _start() callconv(.C) noreturn {
     logger.init();
 
-    boot.init() catch @panic("failed to init boot params");
+    boot.init();
 
     memory.init();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
-    const allocator = gpa.allocator();
-
-    const arr = allocator.alloc(u8, 100) catch unreachable;
-
-    arr[10] = 3;
-    allocator.free(arr);
-    log.info("finished with {}", .{gpa.deinit()});
+    log.debug("finished with {}", .{gpa.deinit()});
     done();
 }

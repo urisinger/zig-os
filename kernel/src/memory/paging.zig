@@ -189,7 +189,6 @@ const PageMapping = extern struct {
         }
 
         pub fn print(self: *const Entry) void {
-            log.debug("entry: {*}", .{self});
             log.info("Addr: 0x{x} - 0x{x}", .{ self.getAddr(), @as(u64, @bitCast(self.*)) });
         }
     };

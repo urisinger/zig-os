@@ -11,7 +11,7 @@ pub fn init() void {
     serial.init() catch {
         @panic("failed to initialize logged");
     };
-    log.debug("initialized logger", .{});
+    log.info("initialized logger", .{});
 }
 
 pub fn logFn(comptime level: log.Level, comptime scope: @TypeOf(.enum_literal), comptime format: []const u8, args: anytype) void {
