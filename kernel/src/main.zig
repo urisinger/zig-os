@@ -1,6 +1,8 @@
 const std = @import("std");
 const log = std.log;
 
+const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false });
+
 const limine = @import("limine");
 
 const logger = @import("logger.zig");
@@ -25,12 +27,9 @@ pub const std_options: std.Options = .{
 
 export fn _start() callconv(.C) noreturn {
     logger.init();
-
     boot.init();
 
     memory.init();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
-    log.debug("finished with {}", .{gpa.deinit()});
     done();
 }

@@ -1,6 +1,10 @@
 const std = @import("std");
 const PORT = 0x3f8;
 
+const utils = @import("utils.zig");
+const outb = utils.outb;
+const inb = utils.inb;
+
 pub fn writer() std.io.Writer(void, error{}, write) {
     return .{ .context = {} };
 }
@@ -37,33 +41,18 @@ pub fn init() SerialError!void {
     return; // Success, no error
 }
 
-fn is_transmit_empty() bool {
+fn isTransmitEmpty() bool {
     return inb(PORT + 5) & 0x20 != 0;
 }
 
-pub fn write_byte(a: u8) void {
-    while (!is_transmit_empty()) {}
+pub fn writeByte(a: u8) void {
+    while (!isTransmitEmpty()) {}
 
     outb(PORT, a);
 }
 
 pub fn puts(str: []const u8) void {
     for (str) |byte| {
-        write_byte(byte);
+        writeByte(byte);
     }
-}
-
-inline fn outb(port: u16, value: u8) void {
-    asm volatile ("outb %[value], %[port]"
-        :
-        : [port] "{dx}" (port),
-          [value] "{al}" (value),
-    );
-}
-
-inline fn inb(port: u16) u8 {
-    return asm volatile ("inb %[port], %[result]"
-        : [result] "={al}" (-> u8),
-        : [port] "{dx}" (port),
-    );
 }

@@ -33,18 +33,18 @@ pub const page_allocator: Allocator = Allocator{
 fn alloc(_: *anyopaque, len: usize, _: u8, _: usize) ?[*]u8 {
     const num_pages = std.math.divCeil(usize, len, utils.PAGE_SIZE) catch unreachable;
 
-    const alloc_start = vmm.allocate_page_block(num_pages) catch |err| {
+    const alloc_start = vmm.allocatePageBlock(num_pages) catch |err| {
         log.err("Could not allocate virtual pages: {}", .{err});
         return null;
     };
 
     for (0..num_pages) |i| {
-        const phys_page = pmm.allocate_page() catch |err| {
+        const phys_page = pmm.allocatePage() catch |err| {
             log.err("Could not allocate physical page: {}", .{err});
             return null;
         };
 
-        paging.map_page(@bitCast(alloc_start + i * utils.PAGE_SIZE), phys_page, .{ .present = true, .read_write = .read_write }) catch |err| {
+        paging.mapPage(@bitCast(alloc_start + i * utils.PAGE_SIZE), phys_page, .{ .present = true, .read_write = .read_write }) catch |err| {
             log.err("Could not map virtual page: {}", .{err});
             return null;
         };
@@ -60,9 +60,9 @@ fn free(_: *anyopaque, buf: []u8, _: u8, _: usize) void {
     for (0..num_pages) |page_index| {
         const page_vaddr = start_addr + page_index * utils.PAGE_SIZE;
 
-        const phys_page = paging.get_paddr(@bitCast(page_vaddr)) catch unreachable;
+        const phys_page = paging.getPaddr(@bitCast(page_vaddr)) catch unreachable;
 
-        pmm.free_page(phys_page) catch unreachable;
+        pmm.freePage(phys_page) catch unreachable;
     }
 }
 

@@ -26,8 +26,8 @@ pub fn init() !void {
 
     for (0..bitmap_num_pages) |i| {
         const vaddr = i * utils.PAGE_SIZE + heap_start;
-        const paddr = try pmm.allocate_page();
-        try paging.map_page(@bitCast(vaddr), paddr, MmapFlags{
+        const paddr = try pmm.allocatePage();
+        try paging.mapPage(@bitCast(vaddr), paddr, MmapFlags{
             .present = true,
             .read_write = .read_write,
         });
@@ -38,21 +38,21 @@ pub fn init() !void {
     @memset(allocator.?.bitmap_ptr[0..bitmap_size], ~@as(u32, 0));
 
     for (0..bitmap_num_pages) |i| {
-        try allocator.?.unfree_page(i);
+        try allocator.?.unfreePage(i);
     }
 
     log.info("initialized vmm", .{});
 }
 
-pub fn allocate_page() !u64 {
+pub fn allocatePage() !u64 {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    return try allocator.?.allocate_page() + heap_start;
+    return try allocator.?.allocatePage() + heap_start;
 }
 
-pub fn free_page(page: u64) !void {
+pub fn freePage(page: u64) !void {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
@@ -61,18 +61,18 @@ pub fn free_page(page: u64) !void {
         log.err("Attempt to free page before heap start: 0x{x}", .{page});
         return Error.OutOfBounds;
     }
-    try allocator.?.free_page(page - heap_start);
+    try allocator.?.freePage(page - heap_start);
 }
 
-pub fn allocate_page_block(num_pages: usize) !u64 {
+pub fn allocatePageBlock(num_pages: usize) !u64 {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    return try allocator.?.allocate_page_block(num_pages) + heap_start;
+    return try allocator.?.allocatePageBlock(num_pages) + heap_start;
 }
 
-pub fn free_page_block(page: u64, num_pages: usize) !void {
+pub fn freePageBlock(page: u64, num_pages: usize) !void {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
@@ -81,13 +81,13 @@ pub fn free_page_block(page: u64, num_pages: usize) !void {
         log.err("Attempt to free page block before heap start: 0x{x}", .{page});
         return Error.OutOfBounds;
     }
-    try allocator.?.free_page_block(page - heap_start, num_pages);
+    try allocator.?.freePageBlock(page - heap_start, num_pages);
 }
 
-pub fn is_page_free(page: u64) !bool {
+pub fn isPageFree(page: u64) !bool {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    return allocator.?.is_page_free(page);
+    return allocator.?.isPageFree(page);
 }

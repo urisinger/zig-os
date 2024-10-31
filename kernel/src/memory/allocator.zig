@@ -15,13 +15,17 @@ pub const BitmapAllocator = struct {
     bitmap_ptr: [*]u32,
     num_pages: usize,
 
-    pub fn allocate_page(self: *BitmapAllocator) !u64 {
+    pub fn allocatePage(self: *BitmapAllocator) !u64 {
         const bitmap_size = (self.num_pages + 31) / 32;
 
         for (0.., self.bitmap_ptr[0..bitmap_size]) |word_index, *word| {
             if (word.* == 0) continue;
 
             const bit_index = @ctz(word.*);
+
+            if (word_index * 32 + bit_index >= self.num_pages) {
+                break;
+            }
             word.* &= ~(@as(u32, 1) << @intCast(bit_index));
 
             const page_ptr = ((word_index * 32) + bit_index) * utils.PAGE_SIZE;
@@ -32,7 +36,7 @@ pub const BitmapAllocator = struct {
         return Error.NoFreePages;
     }
 
-    pub fn free_page(self: *BitmapAllocator, page: u64) !void {
+    pub fn freePage(self: *BitmapAllocator, page: u64) !void {
         const page_index = page / utils.PAGE_SIZE;
         if (page_index >= self.num_pages) {
             log.err("Attempted to free an out-of-bounds page: {}", .{page_index});
@@ -45,7 +49,7 @@ pub const BitmapAllocator = struct {
         self.bitmap_ptr[word_index] |= @as(u32, 1) << @intCast(bit_index);
     }
 
-    pub fn allocate_page_block(self: *BitmapAllocator, num_pages: usize) !u64 {
+    pub fn allocatePageBlock(self: *BitmapAllocator, num_pages: usize) !u64 {
         if (num_pages == 0) return Error.InvalidOperation;
 
         const bitmap_size = (self.num_pages + 31) / 32;
@@ -53,10 +57,10 @@ pub const BitmapAllocator = struct {
         var start_page: usize = 0;
 
         for (0.., self.bitmap_ptr[0..bitmap_size]) |word_index, *word| {
+            if (word.* == 0) continue;
             for (0..32) |bit_position| {
                 if (word_index * 32 + bit_position >= self.num_pages) {
-                    log.err("Failed to allocate block: No free pages available", .{});
-                    return Error.NoFreePages;
+                    break;
                 }
 
                 if (word.* & (@as(u32, 1) << @intCast(bit_position)) != 0) {
@@ -82,7 +86,7 @@ pub const BitmapAllocator = struct {
         return Error.NoFreePages;
     }
 
-    pub fn free_page_block(self: *BitmapAllocator, page: u64, num_pages: usize) !void {
+    pub fn freePageBlock(self: *BitmapAllocator, page: u64, num_pages: usize) !void {
         const block_start = page / utils.PAGE_SIZE;
         if (block_start >= self.num_pages) {
             log.err("Attempted to free an out-of-bounds block starting at index: {}", .{block_start});
@@ -97,7 +101,7 @@ pub const BitmapAllocator = struct {
         }
     }
 
-    pub fn is_page_free(self: *BitmapAllocator, page: u64) !bool {
+    pub fn isPageFree(self: *BitmapAllocator, page: u64) !bool {
         const page_index = page / utils.PAGE_SIZE;
         if (page_index >= self.num_pages) {
             log.err("Checked status of an out-of-bounds page: {}", .{page_index});
@@ -110,7 +114,7 @@ pub const BitmapAllocator = struct {
         return (self.bitmap_ptr[word_index] & (1 << bit_index)) != 0;
     }
 
-    pub fn unfree_page(self: *BitmapAllocator, page_index: u64) !void {
+    pub fn unfreePage(self: *BitmapAllocator, page_index: u64) !void {
         if (page_index >= self.num_pages) {
             log.err("Checked status of an out-of-bounds page: {}", .{page_index});
             return Error.OutOfBounds;

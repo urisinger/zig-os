@@ -22,7 +22,7 @@ const Error = error{
 var pml4_virt: ?*PageMapping = null;
 
 pub fn init() Error!void {
-    const pml4: *PageMapping = @ptrFromInt(try pmm.allocate_page() + globals.hhdm_offset);
+    const pml4: *PageMapping = @ptrFromInt(try pmm.allocatePage() + globals.hhdm_offset);
 
     @memset(&pml4.mappings, @bitCast(@as(u64, 0)));
 
@@ -55,7 +55,7 @@ pub fn init() Error!void {
     base_physical += kernel_data_pages * utils.PAGE_SIZE;
 
     const hhdm_pages = try std.math.divCeil(u64, globals.mem_size, utils.LARGE_PAGE_SIZE);
-    try pml4.mmap_large(@bitCast(globals.hhdm_offset), 0, hhdm_pages, .{
+    try pml4.mmapLarge(@bitCast(globals.hhdm_offset), 0, hhdm_pages, .{
         .present = true,
         .read_write = .read_write,
     });
@@ -64,7 +64,7 @@ pub fn init() Error!void {
         .present = true,
         .read_write = .read_write,
     });
-    set_cr3(@intFromPtr(pml4) - globals.hhdm_offset);
+    setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
     pml4_virt = pml4;
     log.info("initialized paging", .{});
@@ -78,45 +78,45 @@ pub fn mmap(vaddr: VirtualAddress, paddr: u64, num_pages: u64, flags: MmapFlags)
     try pml4_virt.?.mmap(vaddr, paddr, num_pages, flags);
 }
 
-pub fn mmap_large(vaddr: VirtualAddress, paddr: u64, num_pages: u64, flags: MmapFlags) !void {
+pub fn mmapLarge(vaddr: VirtualAddress, paddr: u64, num_pages: u64, flags: MmapFlags) !void {
     if (pml4_virt == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    try pml4_virt.?.mmap_large(vaddr, paddr, num_pages, flags);
+    try pml4_virt.?.mmapLarge(vaddr, paddr, num_pages, flags);
 }
 
-pub fn map_page(vaddr: VirtualAddress, paddr: u64, flags: MmapFlags) !void {
+pub fn mapPage(vaddr: VirtualAddress, paddr: u64, flags: MmapFlags) !void {
     if (pml4_virt == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    try pml4_virt.?.map_page(vaddr, paddr, flags);
+    try pml4_virt.?.mapPage(vaddr, paddr, flags);
 }
 
-pub fn map_page_large(vaddr: VirtualAddress, paddr: u64, flags: MmapFlags) !void {
+pub fn mapPageLarge(vaddr: VirtualAddress, paddr: u64, flags: MmapFlags) !void {
     if (pml4_virt == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    try pml4_virt.?.map_page_large_internal(vaddr, paddr, flags);
+    try pml4_virt.?.mapPageLarge(vaddr, paddr, flags);
 }
 
-pub fn get_paddr(vaddr: VirtualAddress) !u64 {
+pub fn getPaddr(vaddr: VirtualAddress) !u64 {
     if (pml4_virt == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    return pml4_virt.?.get_paddr(vaddr);
+    return pml4_virt.?.getPaddr(vaddr);
 }
 
-inline fn get_cr3() u64 {
+inline fn getCr3() u64 {
     return asm volatile ("mov %cr3, %[ret]"
         : [ret] "=r" (-> u64),
     );
 }
 
-inline fn set_cr3(pml4: u64) void {
+inline fn setCr3(pml4: u64) void {
     asm volatile ("mov %[pml], %cr3"
         :
         : [pml] "r" (pml4),
@@ -206,11 +206,11 @@ const PageMapping = extern struct {
             const current_vaddr: VirtualAddress = @bitCast(@as(u64, @bitCast(vaddr)) + page_index * utils.PAGE_SIZE);
             const current_paddr = @as(u64, @bitCast(paddr)) + page_index * utils.PAGE_SIZE;
 
-            try pml4.map_page(current_vaddr, current_paddr, flags);
+            try pml4.mapPage(current_vaddr, current_paddr, flags);
         }
     }
 
-    pub fn mmap_large(
+    pub fn mmapLarge(
         pml4: *PageMapping,
         vaddr: VirtualAddress,
         paddr: u64,
@@ -221,19 +221,19 @@ const PageMapping = extern struct {
             const current_vaddr: VirtualAddress = @bitCast(@as(u64, @bitCast(vaddr)) + @as(u64, page_index) * utils.LARGE_PAGE_SIZE);
             const current_paddr = @as(u64, @bitCast(paddr)) + @as(u64, page_index) * utils.LARGE_PAGE_SIZE;
 
-            try pml4.map_page_large(current_vaddr, current_paddr, flags);
+            try pml4.mapPageLarge(current_vaddr, current_paddr, flags);
         }
     }
 
-    pub fn map_page(
+    pub fn mapPage(
         pml4: *PageMapping,
         vaddr: VirtualAddress,
         paddr: u64,
         flags: MmapFlags,
     ) Error!void {
-        const pdp = try pml4.get_or_create(vaddr.pml4_idx);
-        const pd = try pdp.get_or_create(vaddr.pdp_idx);
-        const pt = try pd.get_or_create(vaddr.pd_idx);
+        const pdp = try pml4.getOrCreate(vaddr.pml4_idx);
+        const pd = try pdp.getOrCreate(vaddr.pdp_idx);
+        const pt = try pd.getOrCreate(vaddr.pd_idx);
 
         const entry = &pt.mappings[vaddr.pt_idx];
         if (entry.present) {
@@ -245,14 +245,14 @@ const PageMapping = extern struct {
         entry.present = true;
     }
 
-    pub fn map_page_large(
+    pub fn mapPageLarge(
         pml4: *PageMapping,
         vaddr: VirtualAddress,
         paddr: u64,
         flags: MmapFlags,
     ) Error!void {
-        const pdp = try pml4.get_or_create(vaddr.pml4_idx);
-        const pd = try pdp.get_or_create(vaddr.pdp_idx);
+        const pdp = try pml4.getOrCreate(vaddr.pml4_idx);
+        const pd = try pdp.getOrCreate(vaddr.pdp_idx);
 
         const entry = &pd.mappings[vaddr.pd_idx];
         if (entry.present) {
@@ -265,13 +265,13 @@ const PageMapping = extern struct {
         entry.page_size = .large;
     }
 
-    fn get_or_create(
+    fn getOrCreate(
         self: *PageMapping,
         index: u9,
     ) Error!*PageMapping {
         const entry = &self.mappings[index];
         if (!entry.present) {
-            const page = try pmm.allocate_page();
+            const page = try pmm.allocatePage();
             const page_ptr: [*]u32 = @ptrFromInt(page + globals.hhdm_offset);
             @memset(page_ptr[0..1024], 0);
 
@@ -284,7 +284,7 @@ const PageMapping = extern struct {
         return @ptrFromInt(entry.get_addr() + globals.hhdm_offset);
     }
 
-    pub fn get_paddr(pml4: *const PageMapping, vaddr: VirtualAddress) Error!u64 {
+    pub fn getPaddr(pml4: *const PageMapping, vaddr: VirtualAddress) Error!u64 {
         const hhdm_offset = globals.hhdm_offset;
         const pdp: *const PageMapping = @ptrFromInt(pml4.mappings[vaddr.pml4_idx].get_addr() + hhdm_offset);
         if (!pml4.mappings[vaddr.pml4_idx].present) {

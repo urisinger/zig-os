@@ -13,44 +13,44 @@ const Error = @import("allocator.zig").Error;
 
 var allocator: ?BitmapAllocator = null;
 
-pub fn allocate_page() !u64 {
+pub fn allocatePage() !u64 {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    return allocator.?.allocate_page();
+    return allocator.?.allocatePage();
 }
 
-pub fn free_page(page: u64) !void {
+pub fn freePage(page: u64) !void {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    try allocator.?.free_page(page);
+    try allocator.?.freePage(page);
 }
 
-pub fn allocate_page_block(num_pages: usize) !u64 {
+pub fn allocatePageBlock(num_pages: usize) !u64 {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    return allocator.?.allocate_page_block(num_pages);
+    return allocator.?.allocatePageBlock(num_pages);
 }
 
-pub fn free_page_block(page: u64, num_pages: usize) !void {
+pub fn freePageBlock(page: u64, num_pages: usize) !void {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    try allocator.?.free_page_block(page, num_pages);
+    try allocator.?.freePageBlock(page, num_pages);
 }
 
-pub fn is_page_free(page: u64) !bool {
+pub fn isPageFree(page: u64) !bool {
     if (allocator == null) {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    return allocator.?.is_page_free(page);
+    return allocator.?.isPageFree(page);
 }
 
 pub fn init() !void {
