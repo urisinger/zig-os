@@ -26,8 +26,8 @@ pub fn init() !void {
 
     for (0..bitmap_num_pages) |i| {
         const vaddr = i * utils.PAGE_SIZE + heap_start;
-        const paddr = pmm.allocate_page();
-        paging.map_page(@bitCast(vaddr), paddr, 1, MmapFlags{
+        const paddr = try pmm.allocate_page();
+        try paging.map_page(@bitCast(vaddr), paddr, MmapFlags{
             .present = true,
             .read_write = .read_write,
         });
@@ -36,7 +36,7 @@ pub fn init() !void {
     allocator = BitmapAllocator{ .bitmap_ptr = @alignCast(@ptrCast(@as([*]u8, @ptrFromInt(heap_start)) + globals.hhdm_offset)), .num_pages = num_pages };
 
     for (0..bitmap_num_pages) |i| {
-        allocator.?.unfree_page(i);
+        try allocator.?.unfree_page(i);
     }
 }
 

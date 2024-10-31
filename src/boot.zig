@@ -36,8 +36,6 @@ pub fn init() !void {
         .kernel_base_virtual = kernel_address_request.response.?.virtual_base,
     };
 
-    @import("std").log.debug("{any}", .{params});
-
     globals.hhdm_offset = hhdm_request.response.?.offset;
 
     for (mem_map) |mem_entry| {

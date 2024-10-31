@@ -4,7 +4,7 @@ const log = std.log;
 const globals = @import("../globals.zig");
 const utils = @import("../utils.zig");
 
-const Error = error{
+pub const Error = error{
     OutOfBounds,
     NoFreePages,
     InvalidOperation,
@@ -25,7 +25,6 @@ pub const BitmapAllocator = struct {
             word.* &= ~(@as(u32, 1) << @intCast(bit_index));
 
             const page_ptr = ((word_index * 32) + bit_index) * utils.PAGE_SIZE;
-            log.debug("Allocated page at index: {}", .{(word_index * 32) + bit_index});
             return page_ptr;
         }
 
@@ -44,7 +43,6 @@ pub const BitmapAllocator = struct {
         const bit_index = page_index % 32;
 
         self.bitmap_ptr[word_index] |= @as(u32, 1) << @intCast(bit_index);
-        std.log.debug("Freed page at index: {}", .{page_index});
     }
 
     pub fn allocate_page_block(self: *BitmapAllocator, num_pages: usize) !u64 {
@@ -73,7 +71,6 @@ pub const BitmapAllocator = struct {
                             const bit_idx = current_page % 32;
                             self.bitmap_ptr[word_idx] &= ~(@as(u32, 1) << @intCast(bit_idx));
                         }
-                        log.info("Allocated block of {} pages starting at index: {}", .{ num_pages, start_page });
                         return start_page * utils.PAGE_SIZE;
                     }
                 } else {
@@ -99,8 +96,6 @@ pub const BitmapAllocator = struct {
 
             self.bitmap_ptr[word_index] |= (@as(u32, 1) << @intCast(bit_index));
         }
-
-        log.info("Freed block of {} pages starting at index: {}", .{ num_pages, block_start });
     }
 
     pub fn is_page_free(self: *BitmapAllocator, page: u64) !bool {

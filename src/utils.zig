@@ -20,7 +20,6 @@ pub fn KB(kb: u64) u64 {
     return kb * 0x400;
 }
 
-
 pub inline fn done() noreturn {
     while (true) {
         switch (builtin.cpu.arch) {

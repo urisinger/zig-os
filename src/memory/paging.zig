@@ -16,6 +16,7 @@ const Error = error{
     AllocatorNotInitialized,
     Pml4NotInitialized,
     EntryNotPresent,
+    DivisionByZero,
 };
 
 var pml4_virt: ?*PageMapping = null;
@@ -28,7 +29,7 @@ pub fn init() Error!void {
     var base_physical = boot.params.?.kernel_base_physical;
 
     const kernel_text_bytes = @as(u64, @intFromPtr(&globals.kernel_text_end)) - @as(u64, @intFromPtr(&globals.kernel_text_start));
-    const kernel_text_pages = utils.div_up(kernel_text_bytes, utils.PAGE_SIZE);
+    const kernel_text_pages = try std.math.divCeil(u64, kernel_text_bytes, utils.PAGE_SIZE);
     try pml4.mmap(@bitCast(@intFromPtr(&globals.kernel_text_start)), base_physical, kernel_text_pages, .{
         .present = true,
         .read_write = .read_execute,
@@ -36,7 +37,7 @@ pub fn init() Error!void {
     base_physical += kernel_text_pages * utils.PAGE_SIZE;
 
     const kernel_rod_bytes = @as(u64, @intFromPtr(&globals.kernel_rod_end)) - @as(u64, @intFromPtr(&globals.kernel_rod_start));
-    const kernel_rod_pages = utils.div_up(kernel_rod_bytes, utils.PAGE_SIZE);
+    const kernel_rod_pages = try std.math.divCeil(u64, kernel_rod_bytes, utils.PAGE_SIZE);
     try pml4.mmap(@bitCast(@intFromPtr(&globals.kernel_rod_start)), base_physical, kernel_rod_pages, .{
         .present = true,
         .read_write = .read_execute,
@@ -45,7 +46,7 @@ pub fn init() Error!void {
     base_physical += kernel_rod_pages * utils.PAGE_SIZE;
 
     const kernel_data_bytes = @as(u64, @intFromPtr(&globals.kernel_data_end)) - @as(u64, @intFromPtr(&globals.kernel_data_start));
-    const kernel_data_pages = utils.div_up(kernel_data_bytes, utils.PAGE_SIZE);
+    const kernel_data_pages = try std.math.divCeil(u64, kernel_data_bytes, utils.PAGE_SIZE);
     try pml4.mmap(@bitCast(@intFromPtr(&globals.kernel_data_start)), base_physical, kernel_data_pages, .{
         .present = true,
         .read_write = .read_write,
@@ -53,7 +54,7 @@ pub fn init() Error!void {
 
     base_physical += kernel_data_pages * utils.PAGE_SIZE;
 
-    const hhdm_pages = utils.div_up(globals.mem_size, utils.LARGE_PAGE_SIZE);
+    const hhdm_pages = try std.math.divCeil(u64, globals.mem_size, utils.LARGE_PAGE_SIZE);
     try pml4.mmap_large(@bitCast(globals.hhdm_offset), 0, hhdm_pages, .{
         .present = true,
         .read_write = .read_write,
