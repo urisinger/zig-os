@@ -3,22 +3,21 @@ const log = std.log;
 
 const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false });
 
-const limine = @import("limine");
-
 const logger = @import("logger.zig");
 
 const utils = @import("utils.zig");
-const done = utils.done;
 pub const panic = utils.panic;
 
 const boot = @import("boot.zig");
 
-const pmm = @import("memory/pmm.zig");
+const kheap = @import("memory/kheap.zig");
+const idt = @import("idt/idt.zig");
 
-const paging = @import("memory/paging.zig");
-const memory = @import("memory/mod.zig");
+const cpu = @import("cpu.zig");
 
 pub const os = @import("os.zig");
+
+const framebuffer = @import("display/framebuffer.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -28,8 +27,10 @@ pub const std_options: std.Options = .{
 export fn _start() callconv(.C) noreturn {
     logger.init();
     boot.init();
+    framebuffer.init();
 
-    memory.init();
+    kheap.init();
+    idt.init();
 
-    done();
+    cpu.halt();
 }
