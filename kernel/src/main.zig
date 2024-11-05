@@ -18,6 +18,7 @@ const cpu = @import("cpu.zig");
 pub const os = @import("os.zig");
 
 const framebuffer = @import("display/framebuffer.zig");
+const console = @import("display/console.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -31,6 +32,8 @@ export fn _start() callconv(.C) noreturn {
 
     kheap.init();
     idt.init();
+
+    console.blit_char('c', 0, 0);
 
     cpu.halt();
 }

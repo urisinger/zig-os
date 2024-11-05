@@ -4,7 +4,7 @@ const std = @import("std");
 const log = std.log;
 export var framebuffer_request: limine.FramebufferRequest = .{};
 
-var framebuffer: Framebuffer = undefined;
+pub var framebuffer: Framebuffer = undefined;
 
 pub fn init() void {
     const response = framebuffer_request.response.?;
@@ -15,6 +15,9 @@ pub fn init() void {
         .height = limine_framebuffer.height,
         .bpp = limine_framebuffer.bpp,
         .pitch = limine_framebuffer.pitch,
+        .red_mask_offset = limine_framebuffer.red_mask_shift / 8,
+        .blue_mask_offset = limine_framebuffer.green_mask_shift / 8,
+        .green_mask_offset = limine_framebuffer.green_mask_shift / 8,
     };
 
     framebuffer.clear(Color.RED);
@@ -26,7 +29,11 @@ pub const Color = packed struct(u32) {
     b: u8 = 0,
     a: u8 = 255,
 
-    const RED = Color{ .r = 255 };
+    pub const RED = Color{ .r = 255 };
+    pub const GREEN = Color{ .g = 255 };
+    pub const BLUE = Color{ .b = 255 };
+
+    pub const BLACK = Color{};
 };
 
 pub const Framebuffer = struct {
@@ -35,6 +42,9 @@ pub const Framebuffer = struct {
     height: u64, // screen height in pixels
     pitch: u64, // number of bytes per row
     bpp: u16, // bits per pixel
+    red_mask_offset: u8,
+    green_mask_offset: u8,
+    blue_mask_offset: u8,
 
     pub fn setpixel(self: *const Framebuffer, x: u64, y: u64, color: Color) void {
         if (x >= self.width or y >= self.height) return; // prevent out-of-bounds access
@@ -43,9 +53,9 @@ pub const Framebuffer = struct {
         const offset = y * self.pitch + x * bytes_per_pixel;
         const pixel = self.address[offset .. offset + bytes_per_pixel];
 
-        pixel[0] = color.b; // red
-        pixel[1] = color.g; // green
-        pixel[2] = color.r;
+        pixel[self.red_mask_offset] = color.r;
+        pixel[self.green_mask_offset] = color.g;
+        pixel[self.blue_mask_offset] = color.b;
     }
 
     pub fn clear(self: *const Framebuffer, color: Color) void {

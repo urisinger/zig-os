@@ -15,7 +15,7 @@ pub fn init() void {
     cpu.lidt(@intFromPtr(&idtr));
 }
 
-pub fn registerExeptions() void {
+fn registerExeptions() void {
     registerInterrupt(0x0, exceptions.divisionError, .int, .user);
     registerInterrupt(0x1, exceptions.debugException, .int, .user);
     registerInterrupt(0x2, exceptions.nonMaskableInterrupt, .int, .user);
@@ -80,13 +80,13 @@ pub const IdtEntry = packed struct(u128) {
     }
 };
 
-pub export var context: *volatile Context = undefined;
+export var context: *volatile Context = undefined;
 
-const handlers_len = 256;
+const idt_size = 256;
 
-var handlers: [handlers_len]?*const fn (*volatile Context) void = init: {
-    var initial_value: [handlers_len]?*const fn (*volatile Context) void = undefined;
-    for (0..handlers_len) |index| {
+var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
+    var initial_value: [idt_size]?*const fn (*volatile Context) void = undefined;
+    for (0..idt_size) |index| {
         initial_value[index] = null;
     }
     break :init initial_value;
@@ -137,7 +137,7 @@ pub const Context = packed struct {
 
 };
 
-pub var idt: [256]IdtEntry = undefined;
+pub var idt: [idt_size]IdtEntry = undefined;
 
 pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) void, gate_type: GateType, ring: Ring) void {
     handlers[num] = handlerFn;
