@@ -26,14 +26,13 @@ pub const std_options: std.Options = .{
 };
 
 export fn _start() callconv(.C) noreturn {
+    framebuffer.init();
+    console.init();
     logger.init();
     boot.init();
-    framebuffer.init();
 
     kheap.init();
     idt.init();
-
-    console.blit_char('c', 0, 0);
 
     cpu.halt();
 }

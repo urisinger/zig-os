@@ -4,8 +4,7 @@ const log = std.log;
 const utf16 = std.unicode.utf8ToUtf16LeStringLiteral;
 
 const serial = @import("serial.zig");
-const utils = @import("utils.zig");
-const panic = utils.panic;
+const console = @import("display/console.zig");
 
 pub fn init() void {
     serial.init() catch {
@@ -35,4 +34,5 @@ pub fn logFn(comptime level: log.Level, comptime scope: @TypeOf(.enum_literal), 
 
     // Print the formatted message with the colored prefix
     serial.writer().print(colored_prefix ++ format ++ "\n", args) catch return;
+    console.writer().print(colored_prefix ++ format ++ "\n", args) catch return;
 }

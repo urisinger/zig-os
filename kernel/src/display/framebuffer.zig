@@ -6,6 +6,7 @@ export var framebuffer_request: limine.FramebufferRequest = .{};
 
 pub var framebuffer: Framebuffer = undefined;
 
+//Make sure this cant panic or display logs
 pub fn init() void {
     const response = framebuffer_request.response.?;
     const limine_framebuffer = response.framebuffers()[0];
@@ -16,11 +17,9 @@ pub fn init() void {
         .bpp = limine_framebuffer.bpp,
         .pitch = limine_framebuffer.pitch,
         .red_mask_offset = limine_framebuffer.red_mask_shift / 8,
-        .blue_mask_offset = limine_framebuffer.green_mask_shift / 8,
+        .blue_mask_offset = limine_framebuffer.blue_mask_shift / 8,
         .green_mask_offset = limine_framebuffer.green_mask_shift / 8,
     };
-
-    framebuffer.clear(Color.RED);
 }
 
 pub const Color = packed struct(u32) {
@@ -32,9 +31,14 @@ pub const Color = packed struct(u32) {
     pub const RED = Color{ .r = 255 };
     pub const GREEN = Color{ .g = 255 };
     pub const BLUE = Color{ .b = 255 };
+    pub const YELLOW = Color{ .r = 255, .g = 255 };
+    pub const CYAN = Color{ .b = 255, .g = 255 };
 
     pub const BLACK = Color{};
+    pub const WHITE = Color{ .r = 255, .g = 255, .b = 255 };
 };
+
+const serial = @import("../serial.zig");
 
 pub const Framebuffer = struct {
     address: [*]u8,
