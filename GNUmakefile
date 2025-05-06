@@ -16,7 +16,7 @@ endef
 override DEFAULT_KARCH := x86_64
 $(eval $(call DEFAULT_VAR,KARCH,$(DEFAULT_KARCH)))
 
-override DEFAULT_KZIGFLAGS := -Doptimize=ReleaseSafe
+override DEFAULT_KZIGFLAGS := -Doptimize=Debug
 $(eval $(call DEFAULT_VAR,KZIGFLAGS,$(DEFAULT_KZIGFLAGS)))
 
 .PHONY: all
@@ -28,12 +28,18 @@ all-hdd: $(IMAGE_NAME).hdd
 .PHONY: run
 run: run-$(KARCH)
 
+.PHONY: debug 
+debug: debug-$(KARCH)
+
 .PHONY: run-hdd
 run-hdd: run-hdd-$(KARCH)
 
+.PHONY: debug-hdd
+debug-hdd: debug-hdd-$(KARCH)
+
 .PHONY: run-x86_64
 run-x86_64: ovmf $(IMAGE_NAME).iso
-	qemu-system-x86_64 -M q35 -m 2G -bios ovmf-x86_64/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio
+	qemu-system-x86_64 -M q35 -m 2G -bios ovmf-x86_64/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -d int
 
 .PHONY: run-hdd-x86_64
 run-hdd-x86_64: ovmf $(IMAGE_NAME).hdd
@@ -62,6 +68,31 @@ run-bios: $(IMAGE_NAME).iso
 .PHONY: run-hdd-bios
 run-hdd-bios: $(IMAGE_NAME).hdd
 	qemu-system-x86_64 -M q35 -m 2G -hda $(IMAGE_NAME).hdd
+
+
+.PHONY: debug-x86_64
+debug-x86_64: ovmf $(IMAGE_NAME).iso
+	qemu-system-x86_64 -M q35 -m 2G -bios ovmf-x86_64/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -S -s -d int
+
+.PHONY: debug-hdd-x86_64
+debug-hdd-x86_64: ovmf $(IMAGE_NAME).hdd
+	qemu-system-x86_64 -M q35 -m 2G -bios ovmf-x86_64/OVMF.fd -hda $(IMAGE_NAME).hdd -S -s
+
+.PHONY: debug-aarch64
+debug-aarch64: ovmf $(IMAGE_NAME).iso
+	qemu-system-aarch64 -M virt -cpu cortex-a72 -device ramfb -device qemu-xhci -device usb-kbd -m 2G -bios ovmf-aarch64/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -S -s
+
+.PHONY: debug-hdd-aarch64
+debug-hdd-aarch64: ovmf $(IMAGE_NAME).hdd
+	qemu-system-aarch64 -M virt -cpu cortex-a72 -device ramfb -device qemu-xhci -device usb-kbd -m 2G -bios ovmf-aarch64/OVMF.fd -hda $(IMAGE_NAME).hdd -S -s
+
+.PHONY: debug-riscv64
+debug-riscv64: ovmf $(IMAGE_NAME).iso
+	qemu-system-riscv64 -M virt -cpu rv64 -device ramfb -device qemu-xhci -device usb-kbd -m 2G -drive if=pflash,unit=0,format=raw,file=ovmf-riscv64/OVMF.fd -device virtio-scsi-pci,id=scsi -device scsi-cd,drive=cd0 -drive id=cd0,format=raw,file=$(IMAGE_NAME).iso -S -s
+
+.PHONY: debug-hdd-riscv64
+debug-hdd-riscv64: ovmf $(IMAGE_NAME).hdd
+	qemu-system-riscv64 -M virt -cpu rv64 -device ramfb -device qemu-xhci -device usb-kbd -m 2G -drive if=pflash,unit=0,format=raw,file=ovmf-riscv64/OVMF.fd -device virtio-scsi-pci,id=scsi -device scsi-hd,drive=hd0 -drive id=hd0,format=raw,file=$(IMAGE_NAME).hdd -S -s
 
 .PHONY: ovmf
 ovmf: ovmf-$(KARCH)

@@ -91,6 +91,7 @@ pub fn init() Error!void {
     try pml4.mmapLarge(@bitCast(globals.hhdm_offset), 0, hhdm_pages, .{
         .present = true,
         .read_write = .read_write,
+        .cache_disable = true,
     });
 
     try pml4.mmap(@bitCast(@as(u64, 0)), 0, @divExact(utils.MB(1), utils.PAGE_SIZE), .{

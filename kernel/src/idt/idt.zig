@@ -5,6 +5,8 @@ const exceptions = @import("interrupts/exceptions.zig");
 
 const cpu = @import("../cpu.zig");
 
+const irq = @import("interrupts/irq.zig");
+
 pub fn init() void {
     registerExeptions();
     const idtr = Lidr{
@@ -36,6 +38,8 @@ fn registerExeptions() void {
     registerInterrupt(0x13, exceptions.simdFloatingPoint, .int, .user);
     registerInterrupt(0x14, exceptions.virtualizationException, .int, .user);
     registerInterrupt(0x1E, exceptions.securityException, .int, .user);
+
+    registerInterrupt(0x20, irq.irq1, .int, .user);
 }
 
 const Lidr = packed struct {

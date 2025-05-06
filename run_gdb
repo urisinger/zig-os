@@ -1,0 +1,1 @@
+gdb -ex 'file kernel/zig-out/bin/kernel' -ex 'target remote localhost:1234' 

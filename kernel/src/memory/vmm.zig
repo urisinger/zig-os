@@ -33,7 +33,10 @@ pub fn init() !void {
         });
     }
 
-    allocator = BitmapAllocator{ .bitmap_ptr = @ptrFromInt(heap_start), .num_pages = num_pages };
+    allocator = BitmapAllocator{
+        .bitmap_ptr = @ptrFromInt(heap_start),
+        .num_pages = num_pages,
+    };
 
     @memset(allocator.?.bitmap_ptr[0..bitmap_size], ~@as(u32, 0));
 
