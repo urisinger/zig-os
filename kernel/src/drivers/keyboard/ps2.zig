@@ -12,10 +12,14 @@ pub const Error = error{
     DeviceNotAcknowledging,
 };
 
+var driver_state = DriverState{};
+
 pub fn init() !void {
+    _ = ps2.readData() catch 0;
    // Set Scancode Set 1
-    try ps2.writeDataToPort(1, 0xF0); // Command: Set Scancode
-    if (try ps2.readData() != 0xFA) return error.DeviceNotAcknowledging;
+    try ps2.writeDataToPort(1, 0xF0); // Command: Set scancode
+    const data = try ps2.readData();
+    if (data != 0xFA) return error.DeviceNotAcknowledging;
 
     try ps2.writeDataToPort(1, 0x01); // Set 1
     if (try ps2.readData() != 0xFA) return error.DeviceNotAcknowledging;

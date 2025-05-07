@@ -24,6 +24,8 @@ const console = @import("display/console.zig");
 
 const ps2 = @import("drivers/ps2.zig");
 
+const ps2_keyboard = @import("drivers/keyboard/ps2.zig");
+
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
     .log_level = .debug,
@@ -42,6 +44,10 @@ export fn _start() callconv(.C) noreturn {
 
     ps2.init() catch @panic("failed to initilize ps2");
 
+ps2_keyboard.init() catch |err| {
+    std.log.err("Failed to initialize PS/2 keyboard: {}", .{err});
+    @panic("PS/2 keyboard init failed");
+};
     cpu.sti();
     cpu.halt();
 }

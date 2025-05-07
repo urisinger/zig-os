@@ -82,6 +82,10 @@ pub inline fn readIoRegister(reg: u32) u32 {
     return ioApicBase.?[4]; 
 }
 
+pub inline fn sendEoi() void{
+    writeRegister(0xB, 0);
+}
+
 pub inline fn writeRedirEntry(entry_num: u8, entry: RedirectionEntry) void {
     const entry_u64: u64 = @bitCast(entry);
     writeIoRegister(0x10 + @as(u32, @intCast(entry_num)) * 2 + 1, @intCast(entry_u64 >> 32));

@@ -1,4 +1,4 @@
-const KeyCode = enum(u32) {
+pub const KeyCode = enum(u32) {
     A,
     B,
     C,
