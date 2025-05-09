@@ -23,7 +23,7 @@ const Error = error{
     DivisionByZero,
 };
 
-var pml4_virt: ?*PageMapping = null;
+var base_pml4: ?*PageMapping = null;
 
 pub const ReadWrite = enum(u1) {
     read_execute = 0,
@@ -100,7 +100,7 @@ pub fn init() Error!void {
 
     cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
-    pml4_virt = pml4;
+    base_pml4 = pml4;
 
     log.info("initialized paging", .{});
 }
@@ -110,7 +110,6 @@ pub fn mapAllMemory(pml4: *PageMapping) !void {
 
     // Calculate total memory and map each region
     for (mem_map) |mem_entry| {
-        std.log.info("{},{},{}", .{mem_entry.base, mem_entry.kind, mem_entry.length});
         const phys_start = mem_entry.base;
         const phys_end = mem_entry.base + mem_entry.length;
 
@@ -141,51 +140,51 @@ pub fn mapAllMemory(pml4: *PageMapping) !void {
 }
 
 pub fn mmap(vaddr: VirtualAddress, paddr: u64, num_pages: u64, flags: MmapFlags) !void {
-    if (pml4_virt == null) {
+    if (base_pml4 == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    try pml4_virt.?.mmap(vaddr, paddr, num_pages, flags);
+    try base_pml4.?.mmap(vaddr, paddr, num_pages, flags);
 }
 
 pub fn mmapLarge(vaddr: VirtualAddress, paddr: u64, num_pages: u64, flags: MmapFlags) !void {
-    if (pml4_virt == null) {
+    if (base_pml4 == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    try pml4_virt.?.mmapLarge(vaddr, paddr, num_pages, flags);
+    try base_pml4.?.mmapLarge(vaddr, paddr, num_pages, flags);
 }
 
 pub fn mapPage(vaddr: VirtualAddress, paddr: u64, flags: MmapFlags) !void {
-    if (pml4_virt == null) {
+    if (base_pml4 == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    try pml4_virt.?.mapPage(vaddr, paddr, flags);
+    try base_pml4.?.mapPage(vaddr, paddr, flags);
 }
 
 pub fn mapPageLarge(vaddr: VirtualAddress, paddr: u64, flags: MmapFlags) !void {
-    if (pml4_virt == null) {
+    if (base_pml4 == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    try pml4_virt.?.mapPageLarge(vaddr, paddr, flags);
+    try base_pml4.?.mapPageLarge(vaddr, paddr, flags);
 }
 
 pub fn unmapPage(vaddr: VirtualAddress) !void {
-    if (pml4_virt == null) {
+    if (base_pml4 == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    try pml4_virt.?.unmapPage(vaddr);
+    try base_pml4.?.unmapPage(vaddr);
 }
 
 pub fn getPaddr(vaddr: VirtualAddress) !u64 {
-    if (pml4_virt == null) {
+    if (base_pml4 == null) {
         log.err("PML4 is not initialized", .{});
         return Error.Pml4NotInitialized;
     }
-    return pml4_virt.?.getPaddr(vaddr);
+    return base_pml4.?.getPaddr(vaddr);
 }
 
 pub const VirtualAddress = packed struct(u64) {
