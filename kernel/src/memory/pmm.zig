@@ -57,7 +57,17 @@ pub fn init() !void {
     const mem_map = boot.params.?.memory_map;
     const offset = globals.hhdm_offset;
 
-    const num_pages: usize = std.mem.alignForward(u64, globals.mem_size, utils.PAGE_SIZE) / utils.PAGE_SIZE;
+    var max_addr: u64 = 0;
+
+    for (mem_map) |mem_entry| {
+        const end_addr = mem_entry.base + mem_entry.length;
+        if (end_addr > max_addr) {
+            max_addr = end_addr;
+        }
+    }
+
+
+    const num_pages: usize = std.mem.alignForward(u64, max_addr, utils.PAGE_SIZE) / utils.PAGE_SIZE;
     const bitmap_size = (num_pages + 31) / 32;
     const bitmap_bytes = bitmap_size * 4;
     const bitmap_num_pages = (bitmap_bytes + utils.PAGE_SIZE - 1) / utils.PAGE_SIZE;

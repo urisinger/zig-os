@@ -42,6 +42,8 @@ fn putc(c: u8) void {
     const c_u32: u32 = @intCast(c);
     const bitmap = font[char_bytes * c_u32 .. char_bytes * (c_u32 + 1)];
 
+
+
     for (0.., bitmap) |byte_index, byte| {
         for (0..8) |bit_index| {
             const y_offset = (byte_index * 8 + bit_index) / font_x;
@@ -64,6 +66,7 @@ pub fn puts(s: []const u8) void {
     var i: usize = 0;
     while (i < s.len) : (i += 1) {
         if (s[i] == '\x1b' and i + 1 < s.len and s[i + 1] == '[') {
+
             // Parse ANSI escape sequence
             i += 1; // Skip the "\x1b["
             var color_code: ?u8 = null;

@@ -21,7 +21,22 @@ pub fn boundRangeExceeded(_: *volatile idt.Context) void {
     @panic("Unhandled bound range exceeded.");
 }
 
-pub fn invalidOpcode(_: *volatile idt.Context) void {
+pub fn invalidOpcode(ctx: *volatile idt.Context) void {
+    const ip = ctx.rip;
+    const opcode_ptr: [*]const u8 = @ptrFromInt(ip);
+
+    // Read a few bytes from the faulting instruction pointer
+    const opcode0 = opcode_ptr[0];
+    const opcode1 = opcode_ptr[1];
+    const opcode2 = opcode_ptr[2];
+
+    std.log.err("Invalid opcode at RIP=0x{x}: 0x{x} 0x{x} 0x{x}", .{
+        ip,
+        opcode0,
+        opcode1,
+        opcode2,
+    });
+
     @panic("Unhandled invalid opcode.");
 }
 

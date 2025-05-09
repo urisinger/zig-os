@@ -1,5 +1,4 @@
 pub var hhdm_offset: u64 = 0;
-pub var mem_size: u64 = 0;
 
 pub extern var kernel_start: u64;
 pub extern var kernel_end: u64;

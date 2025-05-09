@@ -9,17 +9,23 @@ pub const PAGE_SIZE = KB(4);
 // 2mb
 pub const LARGE_PAGE_SIZE = MB(2);
 
-pub fn GB(mb: u64) u64 {
-    return mb * 0x40000000;
+
+pub const BYTES_PER_KB = 1024;
+pub const BYTES_PER_MB = 1024 * 1024;
+pub const BYTES_PER_GB = 1024 * 1024 * 1024;
+
+pub fn KB(kb: u64) u64 {
+    return kb * BYTES_PER_KB;
 }
 
 pub fn MB(mb: u64) u64 {
-    return mb * 0x100000;
+    return mb * BYTES_PER_MB;
 }
 
-pub fn KB(kb: u64) u64 {
-    return kb * 0x400;
+pub fn GB(gb: u64) u64 {
+    return gb * BYTES_PER_GB;
 }
+
 
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, _: ?usize) noreturn {
     @setCold(true);

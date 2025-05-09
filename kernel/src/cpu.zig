@@ -5,9 +5,9 @@ pub inline fn getCr3() u64 {
 }
 
 pub inline fn setCr3(pml4: u64) void {
-    asm volatile ("mov %[pml], %cr3"
+    asm volatile ("mov %[pml4], %cr3"
         :
-        : [pml] "r" (pml4),
+        : [pml4] "r" (pml4),
         : "memory"
     );
 }
@@ -22,8 +22,32 @@ pub inline fn lidt(idtr: u64) void {
     asm volatile ("lidt (%[idtr])"
         :
         : [idtr] "r" (idtr),
+        : "memory"
     );
 }
+
+pub inline fn lgdt(gdtr: u64) void{
+    asm volatile ("lgdt (%[gdtr])"
+        :
+        : [gdtr] "r" (gdtr),
+        : "memory"
+    );
+}
+
+pub inline fn getRsp() u64 {
+   return asm volatile ("mov %rsp, %[ret]"
+        : [ret] "=r" (-> u64),
+    );
+}
+
+pub inline fn ltr(selector: u16) void {
+    asm volatile ("ltr %%ax"
+        :
+        : [sel] "{ax}"(selector)
+        : "memory"
+    );
+}
+
 
 pub inline fn sti() void {
     asm volatile ("sti");

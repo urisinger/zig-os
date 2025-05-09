@@ -10,6 +10,8 @@ const boot = @import("../boot.zig");
 
 const cpu = @import("../cpu.zig");
 
+const framebuffer = @import("../display/framebuffer.zig");
+
 const Error = error{
     PageAlreadyMapped,
     OutOfBounds,
@@ -55,6 +57,7 @@ pub const MmapFlags = packed struct(u64) {
 };
 
 pub fn init() Error!void {
+
     const pml4: *PageMapping = @ptrFromInt(try pmm.allocatePage() + globals.hhdm_offset);
 
     @memset(&pml4.mappings, @bitCast(@as(u64, 0)));
@@ -67,6 +70,7 @@ pub fn init() Error!void {
         .present = true,
         .read_write = .read_execute,
     });
+
     base_physical += kernel_text_pages * utils.PAGE_SIZE;
 
     const kernel_rod_bytes = @as(u64, @intFromPtr(&globals.kernel_rod_end)) - @as(u64, @intFromPtr(&globals.kernel_rod_start));
@@ -87,21 +91,53 @@ pub fn init() Error!void {
 
     base_physical += kernel_data_pages * utils.PAGE_SIZE;
 
-    const hhdm_pages = try std.math.divCeil(u64, globals.mem_size, utils.LARGE_PAGE_SIZE);
-    try pml4.mmapLarge(@bitCast(globals.hhdm_offset), 0, hhdm_pages, .{
-        .present = true,
-        .read_write = .read_write,
-        .cache_disable = true,
-    });
+    try mapAllMemory(pml4);
 
     try pml4.mmap(@bitCast(@as(u64, 0)), 0, @divExact(utils.MB(1), utils.PAGE_SIZE), .{
         .present = true,
         .read_write = .read_write,
     });
+
     cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
     pml4_virt = pml4;
+
     log.info("initialized paging", .{});
+}
+
+pub fn mapAllMemory(pml4: *PageMapping) !void {
+    const mem_map = boot.params.?.memory_map;
+
+    // Calculate total memory and map each region
+    for (mem_map) |mem_entry| {
+        std.log.info("{},{},{}", .{mem_entry.base, mem_entry.kind, mem_entry.length});
+        const phys_start = mem_entry.base;
+        const phys_end = mem_entry.base + mem_entry.length;
+
+        const aligned_start = std.mem.alignBackward(u64, phys_start, utils.PAGE_SIZE);
+        const aligned_end = std.mem.alignForward(u64, phys_end, utils.PAGE_SIZE);
+
+        var addr = aligned_start;
+        while (addr < aligned_end) {
+            const remaining = aligned_end - addr;
+
+            if (addr % utils.LARGE_PAGE_SIZE == 0 and remaining >= utils.LARGE_PAGE_SIZE) {
+                try pml4.mmapLarge(@bitCast(globals.hhdm_offset + addr), addr, 1, .{
+                    .present = true,
+                    .read_write = .read_write,
+                    .cache_disable = true,
+                });
+                addr += utils.LARGE_PAGE_SIZE;
+            } else {
+                try pml4.mmap(@bitCast(globals.hhdm_offset + addr), addr, 1, .{
+                    .present = true,
+                    .read_write = .read_write,
+                    .cache_disable = true,
+                });
+                addr += utils.PAGE_SIZE;
+            }
+        }
+    }
 }
 
 pub fn mmap(vaddr: VirtualAddress, paddr: u64, num_pages: u64, flags: MmapFlags) !void {
@@ -234,9 +270,6 @@ const PageMapping = extern struct {
         const pt = try pd.getOrCreate(vaddr.pd_idx);
 
         const entry = &pt.mappings[vaddr.pt_idx];
-        if (entry.present) {
-            return Error.PageAlreadyMapped;
-        }
 
         entry.* = @bitCast(paddr);
         entry.* = entry.set_flags(flags);
@@ -253,9 +286,6 @@ const PageMapping = extern struct {
         const pd = try pdp.getOrCreate(vaddr.pdp_idx);
 
         const entry = &pd.mappings[vaddr.pd_idx];
-        if (entry.present) {
-            return Error.PageAlreadyMapped;
-        }
 
         entry.* = @bitCast(paddr);
         entry.* = entry.set_flags(flags);

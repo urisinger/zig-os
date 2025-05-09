@@ -1,5 +1,6 @@
 const std = @import("std");
 const utils = @import("../utils.zig");
+const gdt = @import("../gdt.zig");
 
 const exceptions = @import("interrupts/exceptions.zig");
 
@@ -8,6 +9,7 @@ const cpu = @import("../cpu.zig");
 const irq = @import("interrupts/irq.zig");
 
 pub fn init() void {
+
     registerExeptions();
     const idtr = Lidr{
         .size = @intCast((idt.len * @sizeOf(IdtEntry))),
@@ -40,6 +42,8 @@ fn registerExeptions() void {
     registerInterrupt(0x1E, exceptions.securityException, .int, .user);
 
     registerInterrupt(0x20, irq.irq1, .int, .user);
+
+    registerInterrupt(0x80, irq.syscall, .int, .user);
 }
 
 const Lidr = packed struct {
@@ -76,7 +80,7 @@ pub const IdtEntry = packed struct(u128) {
         return IdtEntry{
             .offset_1 = @intCast(address & 0xffff),
             .offset_2 = @intCast((address >> 16) & 0xffffffffffff), // Mask to 48 bits
-            .selector = 0x28, // This is correct for your GDT setup
+            .selector = 0x8, // This is correct for your GDT setup
             .gate_type = gate_type,
             .ring = ring,
             .present = true,

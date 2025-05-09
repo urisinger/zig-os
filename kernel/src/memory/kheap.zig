@@ -18,16 +18,39 @@ pub fn init() void {
         @panic("failed to init paging {}");
     };
 
+
     vmm.init() catch @panic("failed to init vmm");
 }
 
-pub fn allocatePages(num_pages: usize) !u64 {
+
+pub fn allocateExecutablePageWithCode(code: []const u8) !u64 {
+    const temp_flags = .{ .present = true, .read_write = .read_write, .user_supervisor = .supervisor };
+    const virt = try allocatePagesWithFlags(1, temp_flags);
+
+    const virt_ptr: [*]u8 = @ptrFromInt(virt);
+    @memcpy(virt_ptr, code);
+
+    const phys = paging.getPaddr(@bitCast(virt)) catch unreachable;
+    try paging.unmapPage(@bitCast(virt));
+
+    const exec_flags = .{ .present = true, .read_write = .read_execute, .user_supervisor = .user };
+    try paging.mapPage(@bitCast(virt), phys, exec_flags);
+
+    return virt;
+}
+
+pub fn allocatePagesWithFlags(num_pages: usize, flags: paging.MmapFlags ) !u64 {
     const alloc_start = try vmm.allocatePageBlock(num_pages);
 
     for (0..num_pages) |i| {
         const phys_page = try pmm.allocatePage();
-        try paging.mapPage(@bitCast(alloc_start + i * utils.PAGE_SIZE), phys_page, .{ .present = true, .read_write = .read_write });
+        try paging.mapPage(
+            @bitCast(alloc_start + i * utils.PAGE_SIZE),
+            phys_page,
+            flags,
+        );
     }
+
     return alloc_start;
 }
 
@@ -55,7 +78,7 @@ pub const page_allocator: Allocator = Allocator{
 fn alloc(_: *anyopaque, len: usize, _: u8, _: usize) ?[*]u8 {
     const num_pages = std.math.divCeil(usize, len, utils.PAGE_SIZE) catch unreachable;
 
-    const start_addr = allocatePages(num_pages) catch |err| {
+    const start_addr = allocatePagesWithFlags(num_pages, .{ .present = true, .read_write = .read_write }) catch |err| {
         log.err("failed to allocate pages in kernel: {}", .{err});
         return null;
     };

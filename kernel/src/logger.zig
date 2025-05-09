@@ -21,6 +21,7 @@ pub fn logFn(comptime level: log.Level, comptime scope: @TypeOf(.enum_literal), 
         .debug => "\x1b[36m", // Cyan for debug
     };
 
+
     const reset_color = "\x1b[0m";
 
     const scope_prefix = switch (scope) {

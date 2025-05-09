@@ -9,7 +9,7 @@ export var base_revision: limine.BaseRevision = .{ .revision = 2 };
 
 export var memory_map_request: limine.MemoryMapRequest = .{};
 
-export var hhdm_request: limine.HhdmRequest = .{};
+pub export var hhdm_request: limine.HhdmRequest = .{};
 
 export var kernel_address_request: limine.KernelAddressRequest = .{};
 
@@ -37,8 +37,4 @@ pub fn init() void {
     };
 
     globals.hhdm_offset = hhdm_request.response.?.offset;
-
-    for (mem_map) |mem_entry| {
-        globals.mem_size += mem_entry.length;
-    }
 }

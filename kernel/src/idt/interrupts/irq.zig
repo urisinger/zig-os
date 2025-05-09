@@ -6,7 +6,7 @@ const ps2 = @import("../../drivers/ps2.zig");
 
 const keyboard = @import("../../drivers/keyboard/ps2.zig");
 
-pub fn irq0(_: *volatile idt.Context) void {
+pub fn syscall(_: *volatile idt.Context) void {
     std.log.info("hi", .{});
 }
 
