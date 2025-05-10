@@ -60,6 +60,19 @@ pub const VmAllocator = struct {
         return null;
     }
 
+    pub fn destroy(self: *VmAllocator) void {
+        var current = self.head;
+    
+        while (current) |region| {
+            const next = region.next;
+            self.allocator.destroy(region);
+            current = next;
+        }
+    
+        self.head = null;
+        self.tail = null;
+    }
+
     pub fn free(self: *VmAllocator, addr: usize, size: usize) void {
         const new_region = self.allocator.create(Region) catch unreachable;
         new_region.* = .{ .base = addr, .size = size, .next = null, .prev = null };
@@ -110,3 +123,76 @@ pub const VmAllocator = struct {
     }
 };
 
+const PAGE = 4096;
+
+const testing = std.testing;
+
+fn initAllocator() !VmAllocator {
+    return VmAllocator.init(std.testing.allocator, 0x100000, 64 * PAGE);
+}
+
+test "basic allocation works" {
+    var vm = try initAllocator();
+    const addr = vm.alloc(PAGE, PAGE).?;
+    try testing.expect(addr >= 0x100000);
+    vm.destroy();
+}
+
+test "alignment is respected" {
+    var vm = try initAllocator();
+    const addr = vm.alloc(PAGE, PAGE * 4).?;
+    try testing.expect(addr % (PAGE * 4) == 0);
+    vm.destroy();
+}
+
+test "free merges forward" {
+    var vm = try initAllocator();
+    const a = vm.alloc(PAGE, PAGE).?;
+    const b = vm.alloc(PAGE, PAGE).?;
+    vm.free(a, PAGE);
+    vm.free(b, PAGE);
+    const merged = vm.alloc(2 * PAGE, PAGE);
+    try testing.expect(merged == a);
+    vm.destroy();
+}
+
+test "free merges backward" {
+    var vm = try initAllocator();
+    const a = vm.alloc(PAGE, PAGE).?;
+    const b = vm.alloc(PAGE, PAGE).?;
+    vm.free(b, PAGE);
+    vm.free(a, PAGE);
+    const merged = vm.alloc(2 * PAGE, PAGE);
+    try testing.expect(merged == a);
+    vm.destroy();
+}
+
+test "free merges both directions" {
+    var vm = try initAllocator();
+    const a = vm.alloc(PAGE, PAGE).?;
+    const b = vm.alloc(PAGE, PAGE).?;
+    const c = vm.alloc(PAGE, PAGE).?;
+    vm.free(a, PAGE);
+    vm.free(c, PAGE);
+    vm.free(b, PAGE);
+    const merged = vm.alloc(3 * PAGE, PAGE);
+    try testing.expect(merged == a);
+    vm.destroy();
+}
+
+test "full range reuse after free" {
+    var vm = try initAllocator();
+    const base = vm.alloc(64 * PAGE, PAGE).?;
+    vm.free(base, 64 * PAGE);
+    const again = vm.alloc(64 * PAGE, PAGE).?;
+    try testing.expect(again == base);
+    vm.destroy();
+}
+
+test "out of memory returns null" {
+    var vm = try initAllocator();
+    _ = vm.alloc(64 * PAGE, PAGE).?;
+    const fail = vm.alloc(PAGE, PAGE);
+    try testing.expect(fail == null);
+    vm.destroy();
+}
