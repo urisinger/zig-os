@@ -5,7 +5,7 @@ const utils = @import("../../utils.zig");
 const globals = @import("../../globals.zig");
 
 const pmm = @import("../pmm.zig");
-const paging = @import("../paging.zig");
+const paging = @import("paging.zig");
 const MmapFlags = paging.MmapFlags;
 
 const BitmapAllocator = @import("../allocator.zig").BitmapAllocator;
@@ -19,7 +19,7 @@ const heap_size = utils.GB(2);
 pub fn init() !void {
     heap_start = std.mem.alignForward(u64, @intFromPtr(&globals.kernel_end), utils.PAGE_SIZE);
 
-    const num_pages: usize = try std.math.divCeil(u64, heap_size, utils.PAGE_SIZE);
+    const num_pages: usize = std.math.divCeil(u64, heap_size, utils.PAGE_SIZE) catch unreachable;
     const bitmap_size = (num_pages + 31) / 32;
     const bitmap_bytes = bitmap_size * 4;
     const bitmap_num_pages = try std.math.divCeil(u64, bitmap_bytes, utils.PAGE_SIZE);

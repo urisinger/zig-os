@@ -4,7 +4,7 @@ const std = @import("std");
 
 const vmm = @import("../memory/kernel/vmm.zig");
 
-const paging = @import("../memory/paging.zig");
+const paging = @import("../memory/kernel/paging.zig");
 
 const IA32_APIC_BASE = 0x1B;
 const APIC_BASE_MASK = 0xFFFFF000;

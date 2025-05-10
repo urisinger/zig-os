@@ -1,7 +1,10 @@
 const vmm = @import("vmm.zig");
 const pmm = @import("../pmm.zig");
-const paging = @import("../paging.zig");
+const paging = @import("../page_table.zig");
 const utils = @import("../../utils.zig");
+const globals = @import("../../globals.zig");
+
+const std= @import("std");
 
 const Error = error{
     OutOfBounds,
@@ -14,35 +17,26 @@ pub fn allocateUserExecutablePageWithCode(
 ) !usize {
     const page_size = utils.PAGE_SIZE;
 
-    // 1. Allocate one virtual page for the user code
     const virt = vm.alloc(page_size, page_size) orelse return Error.OutOfBounds;
 
-    // 2. Allocate one physical page
     const phys = try pmm.allocatePage();
 
-    // 3. Temporarily map the physical page for writing the code
     const temp_flags = .{
         .present = true,
         .read_write = .read_write,
         .user_supervisor = .supervisor,
     };
 
-    try paging.mapPage(@bitCast(virt), phys, temp_flags);
+    try page_table.mapPage(@bitCast(virt), phys, temp_flags);
 
-    // 4. Copy code into virtual address
     const virt_ptr: [*]u8 = @ptrFromInt(virt);
     @memcpy(virt_ptr[0..code.len], code);
 
-    // 5. Unmap the temporary mapping
-    try paging.unmapPage(@bitCast(virt));
-
-    // 6. Remap with user/executable permissions
-    const exec_flags = .{
+    try page_table.setPageFlags(@bitCast(virt), .{
         .present = true,
         .read_write = .read_execute,
         .user_supervisor = .user,
-    };
-    try page_table.mapPage(@bitCast(virt), phys, exec_flags);
+    });
 
     return virt;
 }

@@ -34,6 +34,7 @@ pub fn enterUserMode(entry_point: u64, user_stack_top: u64, kernel_stack_top: u6
         .{  USER_SS, USER_SS,  USER_CS }
     );
 
+
     asm volatile (asm_code
         :
         : [entry] "r"(entry_point),

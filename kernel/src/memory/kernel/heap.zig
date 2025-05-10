@@ -1,6 +1,6 @@
 const std = @import("std");
 const log = std.log;
-const paging = @import("../paging.zig");
+const paging = @import("paging.zig");
 const pmm = @import("../pmm.zig");
 const vmm = @import("vmm.zig");
 
@@ -22,27 +22,7 @@ pub fn init() void {
     vmm.init() catch @panic("failed to init vmm");
 }
 
-
-pub fn allocateExecutablePageWithCode(code: []const u8) !u64 {
-    const temp_flags = .{ .present = true, .read_write = .read_write, .user_supervisor = .supervisor };
-
-    std.log.info("g", .{});
-    const virt = try allocatePagesWithFlags(1, temp_flags);
-
-    const virt_ptr: [*]u8 = @ptrFromInt(virt);
-    @memcpy(virt_ptr, code);
-
-    const phys = paging.getPaddr(@bitCast(virt)) catch unreachable;
-    try paging.unmapPage(@bitCast(virt));
-
-    const exec_flags = .{ .present = true, .read_write = .read_execute, .user_supervisor = .user };
-    try paging.mapPage(@bitCast(virt), phys, exec_flags);
-
-    return virt;
-}
-
 pub fn allocatePagesWithFlags(num_pages: usize, flags: paging.MmapFlags ) !u64 {
-    std.log.info("h", .{});
     const alloc_start = try vmm.allocatePageBlock(num_pages);
 
     for (0..num_pages) |i| {
