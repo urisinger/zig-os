@@ -2,7 +2,7 @@ const cpu = @import("../cpu.zig");
 const globals = @import("../globals.zig");
 const std = @import("std");
 
-const vmm = @import("../memory/vmm.zig");
+const vmm = @import("../memory/kernel/vmm.zig");
 
 const paging = @import("../memory/paging.zig");
 

@@ -35,5 +35,5 @@ pub fn logFn(comptime level: log.Level, comptime scope: @TypeOf(.enum_literal), 
 
     // Print the formatted message with the colored prefix
     serial.writer().print(colored_prefix ++ format ++ "\n", args) catch return;
-    console.writer().print(colored_prefix ++ format ++ "\n", args) catch return;
+    console.writer().print(colored_prefix ++ format ++ "\n", args) catch {};
 }

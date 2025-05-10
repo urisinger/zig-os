@@ -1,15 +1,15 @@
 const std = @import("std");
 const log = std.log;
 
-const utils = @import("../utils.zig");
-const globals = @import("../globals.zig");
+const utils = @import("../../utils.zig");
+const globals = @import("../../globals.zig");
 
-const pmm = @import("pmm.zig");
-const paging = @import("paging.zig");
+const pmm = @import("../pmm.zig");
+const paging = @import("../paging.zig");
 const MmapFlags = paging.MmapFlags;
 
-const BitmapAllocator = @import("allocator.zig").BitmapAllocator;
-const Error = @import("allocator.zig").Error;
+const BitmapAllocator = @import("../allocator.zig").BitmapAllocator;
+const Error = @import("../allocator.zig").Error;
 
 var allocator: ?BitmapAllocator = null;
 var heap_start: u64 = 0;

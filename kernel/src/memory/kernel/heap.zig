@@ -1,11 +1,11 @@
 const std = @import("std");
 const log = std.log;
-const paging = @import("paging.zig");
-const pmm = @import("pmm.zig");
+const paging = @import("../paging.zig");
+const pmm = @import("../pmm.zig");
 const vmm = @import("vmm.zig");
 
-const utils = @import("../utils.zig");
-const globals = @import("../globals.zig");
+const utils = @import("../../utils.zig");
+const globals = @import("../../globals.zig");
 const VirtualAddress = paging.VirtualAddress;
 
 const Allocator = std.mem.Allocator;
@@ -25,6 +25,8 @@ pub fn init() void {
 
 pub fn allocateExecutablePageWithCode(code: []const u8) !u64 {
     const temp_flags = .{ .present = true, .read_write = .read_write, .user_supervisor = .supervisor };
+
+    std.log.info("g", .{});
     const virt = try allocatePagesWithFlags(1, temp_flags);
 
     const virt_ptr: [*]u8 = @ptrFromInt(virt);
@@ -40,6 +42,7 @@ pub fn allocateExecutablePageWithCode(code: []const u8) !u64 {
 }
 
 pub fn allocatePagesWithFlags(num_pages: usize, flags: paging.MmapFlags ) !u64 {
+    std.log.info("h", .{});
     const alloc_start = try vmm.allocatePageBlock(num_pages);
 
     for (0..num_pages) |i| {

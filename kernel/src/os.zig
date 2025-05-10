@@ -1,1 +1,1 @@
-pub const heap = @import("memory/kheap.zig");
+pub const heap = @import("memory/kernel/heap.zig");

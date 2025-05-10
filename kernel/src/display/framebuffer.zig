@@ -97,7 +97,7 @@ pub const Framebuffer = struct {
                 // Get the source pixel color
                 const color = src[src_y * src_width + src_x];
                 // Set the destination pixel
-                self.setPixel(dest_x, dest_y, color);
+                self.setpixel(dest_x, dest_y, color);
             }
         }
     }

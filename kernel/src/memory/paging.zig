@@ -56,6 +56,22 @@ pub const MmapFlags = packed struct(u64) {
     execution_disable: bool = false,
 };
 
+pub fn createNewAddressSpace() !*PageMapping {
+    if (base_kernel_pml4 == null) {
+        log.err("Cannot create new address space: kernel PML4 not initialized", .{});
+        return Error.Pml4NotInitialized;
+    }
+
+    const new_pml4: *PageMapping = @ptrFromInt(try pmm.allocatePage() + globals.hhdm_offset);
+    @memset(&new_pml4.mappings, @bitCast(@as(u64, 0)));
+
+    for (256..512) |i| {
+        new_pml4.mappings[i] = base_kernel_pml4.?.mappings[i];
+    }
+
+    return new_pml4;
+}
+
 pub fn init() Error!void {
     const pml4: *PageMapping = @ptrFromInt(try pmm.allocatePage() + globals.hhdm_offset);
 
@@ -105,10 +121,6 @@ pub fn init() Error!void {
 
     try mapAllMemory(pml4);
 
-    try pml4.mmap(@bitCast(@as(u64, 0)), 0, @divExact(utils.MB(1), utils.PAGE_SIZE), .{
-        .present = true,
-        .read_write = .read_write,
-    });
 
     cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
@@ -208,7 +220,7 @@ pub const VirtualAddress = packed struct(u64) {
     _pad: u16 = 0,
 };
 
-const PageMapping = extern struct {
+pub const PageMapping = extern struct {
     const Entry = packed struct(u64) {
         present: bool = false,
         read_write: ReadWrite = .read_write,

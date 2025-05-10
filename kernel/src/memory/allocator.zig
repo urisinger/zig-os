@@ -53,7 +53,7 @@ pub const BitmapAllocator = struct {
         if (num_pages == 0) return Error.InvalidOperation;
 
         const bitmap_size = (self.num_pages + 31) / 32;
-        var remaining_pages: usize = 0;
+        var remaining_pages: usize = num_pages;
         var start_page: usize = 0;
 
         for (0.., self.bitmap_ptr[0..bitmap_size]) |word_index, *word| {
@@ -79,6 +79,7 @@ pub const BitmapAllocator = struct {
                     remaining_pages = num_pages;
                     start_page = (word_index * 32 + bit_position + 1);
                 }
+
             }
         }
 
