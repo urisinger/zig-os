@@ -1,0 +1,12 @@
+# bochsrc
+megs: 2048
+
+# Point to your BIOS-bootable ISO image
+ata0-master: type=disk, path="template.hdd", model=flat
+boot: disk
+com1: enabled=1, mode=file, dev="stdout.txt"
+
+display_library: sdl2
+
+magic_break:enabled=1
+
