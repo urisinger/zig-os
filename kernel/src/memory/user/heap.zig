@@ -15,30 +15,42 @@ pub fn allocateUserExecutablePageWithCode(
     page_table: *paging.PageMapping,
     code: []const u8,
 ) !usize {
-    const page_size = utils.PAGE_SIZE;
+    const num_pages = std.math.divCeil(u64, code.len, utils.PAGE_SIZE) catch unreachable;
 
-    const virt = vm.alloc(page_size, page_size) orelse return Error.OutOfBounds;
+    const virt_base = vm.alloc(utils.PAGE_SIZE * code.len, utils.PAGE_SIZE) orelse return Error.OutOfBounds;
 
-    const phys = try pmm.allocatePage();
+    for (0..num_pages) |i| {
+        const vaddr = virt_base + i * utils.PAGE_SIZE;
+        const paddr = try pmm.allocatePage();
 
-    const temp_flags = .{
-        .present = true,
-        .read_write = .read_write,
-        .user_supervisor = .supervisor,
-    };
+        try page_table.mapPage(
+            @bitCast(vaddr),
+            paddr,
+            .{
+                .present = true,
+                .read_write = .read_write,
+                .user_supervisor = .supervisor,
+            },
+        );
+    }
 
-    try page_table.mapPage(@bitCast(virt), phys, temp_flags);
 
-    const virt_ptr: [*]u8 = @ptrFromInt(virt);
+    const virt_ptr: [*]u8 = @ptrFromInt(virt_base);
     @memcpy(virt_ptr[0..code.len], code);
 
-    try page_table.setPageFlags(@bitCast(virt), .{
-        .present = true,
-        .read_write = .read_execute,
-        .user_supervisor = .user,
-    });
+    for (0..num_pages) |i| {
+        const vaddr = virt_base + i * utils.PAGE_SIZE;
+        try page_table.setPageFlags(
+            @bitCast(vaddr),
+            .{
+                .present = true,
+                .read_write = .read_execute,
+                .user_supervisor = .user,
+            },
+        );
+    }
 
-    return virt;
+    return virt_base;
 }
 
 

@@ -86,11 +86,3 @@ pub fn freePageBlock(page: u64, num_pages: usize) !void {
     }
     try allocator.?.freePageBlock(page - heap_start, num_pages);
 }
-
-pub fn isPageFree(page: u64) !bool {
-    if (allocator == null) {
-        log.err("Allocator is not initialized", .{});
-        return Error.AllocatorNotInitialized;
-    }
-    return allocator.?.isPageFree(page);
-}
