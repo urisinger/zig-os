@@ -39,7 +39,7 @@ pub var table = [_]GdtEntry{
 
 
 pub fn init() void {
-    table[5] = GdtEntry.init(
+   table[5] = GdtEntry.init(
         @truncate(@intFromPtr(&tss.tss)),
         @sizeOf(tss.Tss) - 1,
         @bitCast(@as(u8,0x89)),

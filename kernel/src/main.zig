@@ -46,6 +46,7 @@ const entry_code = [_]u8{
 
 
 export fn _start() callconv(.C) noreturn {
+    const kernel_stack = @frameAddress();
     cpu.cli();
     logger.init();
     boot.init();
@@ -70,7 +71,6 @@ export fn _start() callconv(.C) noreturn {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
     const allocator = gpa.allocator();
     
-    const kernel_stack = cpu.getRsp();
 
     std.log.info("h", .{});
     threads.createAndPopulateTask(allocator, &entry_code,kernel_stack, "task_1");

@@ -12,7 +12,7 @@ const BitmapAllocator = @import("../allocator.zig").BitmapAllocator;
 const Error = @import("../allocator.zig").Error;
 
 var allocator: ?BitmapAllocator = null;
-var heap_start: u64 = 0;
+var heap_start: u64 = undefined;
 
 const heap_size = utils.GB(2);
 

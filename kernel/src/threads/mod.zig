@@ -14,9 +14,9 @@ const uheap = @import("../memory/user/heap.zig");
 
 const globals = @import("../globals.zig");
 const Task = struct{
-    vma: VmaAllocator,
-    pml4: *page_table.PageMapping,
     context: idt.Context,
+    pml4: *page_table.PageMapping,
+    vma: VmaAllocator,
     kernel_stack: u64,
 
     name: ?[]const u8,
@@ -28,16 +28,23 @@ const TaskQueueEntry = struct{
     next: *TaskQueueEntry,
 };
 
-var current_task: ?*TaskQueueEntry = undefined;
+export var current_task: ?*TaskQueueEntry = undefined;
 
-export fn saveContext() void{
-    
-    if (current_task) |cur_task|{
-    cur_task.task.context = idt.context.*;
+
+export fn saveContext() callconv(.C) void {
+    if (current_task) |cur_task| {
+        const context_ptr: [*]volatile const u8 = @ptrCast(idt.context);
+        const dest_ptr: [*]u8 = @ptrCast(&cur_task.task.context);
+
+        @memcpy(
+            dest_ptr[0..@sizeOf(idt.Context)],
+            context_ptr[0..@sizeOf(idt.Context)],
+        );
     }
 }
 
-export fn contextSwitch() void{
+
+export fn contextSwitch() callconv(.C) void{
     if (current_task) |cur_task|{
         current_task = cur_task.next;
 
@@ -70,30 +77,31 @@ pub fn createAndPopulateTask(
 
     const user_pml4 = paging.createNewAddressSpace() catch unreachable;
 
-    cpu.setCr3(@intFromPtr(user_pml4) - globals.hhdm_offset);
-
     const entry_point = uheap.allocateUserExecutablePageWithCode(
         &user_vmm,
         user_pml4,
         entry_code,
     ) catch unreachable;
 
+
     const user_stack_bottom = uheap.allocateUserPages(&user_vmm, user_pml4, 1) catch unreachable;
     const user_stack_top = user_stack_bottom + utils.PAGE_SIZE;
 
     const context = idt.Context{
         .registers = .{
-            .rsp = user_stack_top,
-            // everything else zero-initialized
         },
         .interrupt_num = 0,
         .error_code = 0,
-        .rip = entry_point,
-        .cs = 0x18 | 0x3,
-        .rflags = 0x202,
-        .rsp = user_stack_top,
-        .ss = 0x20 | 0x3,
+        .ret_frame = .{
+            .rip = entry_point,
+            .cs = 0x18 | 0x3,
+            .rflags = 0x202,
+            .rsp = user_stack_top,
+            .ss = 0x20 | 0x3,
+        },
     };
+
+
 
     const task = Task{
         .vma = user_vmm,
@@ -103,58 +111,66 @@ pub fn createAndPopulateTask(
         .name = name,
     };
 
+
+    std.log.info("0x{x}", .{@as(u64,@intFromPtr(task.pml4))});
+
     const task_entry = allocator.create(TaskQueueEntry) catch unreachable;
-    task_entry.* = TaskQueueEntry{
-        .task = task,
-        .next = task_entry, // for round-robin single entry case
-    };
+    task_entry.task = task;
+    task_entry.next = task_entry;
+
+
+    std.log.info("0x{x}", .{@as(u64,@intFromPtr(task_entry.task.pml4))});
 
     insertTask(task_entry);
 }
 
-
-
-
-pub fn enterUserMode() noreturn {
-    const USER_CS: u64 = 0x18 | 0x3;
-    const USER_SS: u64 = 0x20 | 0x3;
-
+pub export fn enterUserMode() noreturn {
     const task = &current_task.?.task;
-    const ctx = &task.context;
-
     // Set up TSS to point to the kernel stack for this task
+
     tss.set_rsp(task.kernel_stack);
     cpu.ltr(0x28); // Optional: only once after boot, not every time
 
+    cpu.setCr3(@intFromPtr(task.pml4) - globals.hhdm_offset);
     // Enable interrupts before entering user mode
+
     cpu.sti();
 
-    // Inline assembly to switch to user mode with iretq
-    const asm_code = std.fmt.comptimePrint(
-        \\ mov ${}, %%ax
+    const context: *u8 = @ptrCast(&task.context); // context_ptr is *Context
+    
+    asm volatile (
+        \\ mov %[ctx], %%rsp
+        \\ mov $0x23, %%ax
         \\ mov %%ax, %%ds
         \\ mov %%ax, %%es
         \\ mov %%ax, %%fs
         \\ mov %%ax, %%gs
+        \\ pop %%r15
+        \\ pop %%r14
+        \\ pop %%r13
+        \\ pop %%r12
+        \\ pop %%r11
+        \\ pop %%r10
+        \\ pop %%r9
+        \\ pop %%r8
+        \\ pop %%rdi
+        \\ pop %%rsi
+        \\ pop %%rbp
+        \\ pop %%rdx
+        \\ pop %%rcx
+        \\ pop %%rbx
+        \\ pop %%rax
+    
+
+    
+        \\ add $16, %%rsp
         \\ xchg %%bx, %%bx
-        \\
-        \\ pushq ${}
-        \\ pushq %[user_rsp]
-        \\ pushfq
-        \\ pushq ${}
-        \\ pushq %[user_rip]
         \\ iretq
-        ,
-        .{ USER_SS, USER_SS, USER_CS }
+        :
+        : [ctx] "r"(context)
+        : "memory", "rax"
     );
 
-    asm volatile (asm_code
-        :
-        : [user_rip] "r"(ctx.rip),
-          [user_rsp] "r"(ctx.rsp)
-        : "rax", "memory"
-    );
 
     unreachable;
 }
-

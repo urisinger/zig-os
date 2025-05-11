@@ -23,7 +23,7 @@ fn registerExeptions() void {
     registerInterrupt(0x0, exceptions.divisionError, .int, .user);
     registerInterrupt(0x1, exceptions.debugException, .int, .user);
     registerInterrupt(0x2, exceptions.nonMaskableInterrupt, .int, .user);
-    registerInterrupt(0x3, exceptions.breakpoint, .trap, .user);
+    registerInterrupt(0x3, exceptions.breakpoint, .int, .user);
     registerInterrupt(0x5, exceptions.boundRangeExceeded, .int, .user);
     registerInterrupt(0x6, exceptions.invalidOpcode, .int, .user);
     registerInterrupt(0x7, exceptions.deviceNotAvailable, .int, .user);
@@ -111,22 +111,29 @@ export fn interruptDispatch() void {
 
 
 pub const Registers = packed struct {
-    r15: u64 = 0,
-    r14: u64 = 0,
-    r13: u64 = 0,
-    r12: u64 = 0,
-    r11: u64 = 0,
-    r10: u64 = 0,
-    r9: u64 = 0,
-    r8: u64 = 0,
-    rdi: u64 = 0,
-    rsi: u64 = 0,
-    rbp: u64 = 0,
-    rsp: u64 = 0,
-    rdx: u64 = 0,
-    rcx: u64 = 0,
-    rbx: u64 = 0,
-    rax: u64 = 0,
+    r15: u64 = 15,
+    r14: u64 = 14,
+    r13: u64 = 13,
+    r12: u64 = 12,
+    r11: u64 = 11,
+    r10: u64 = 10,
+    r9: u64 = 9,
+    r8: u64 = 8,
+    rdi: u64 = 7,
+    rsi: u64 = 6,
+    rbp: u64 = 5,
+    rdx: u64 = 4,
+    rcx: u64 = 3,
+    rbx: u64 = 2,
+    rax: u64 = 1,
+};
+
+const IretFrame = packed struct {
+    rip: u64,
+    cs: u64,
+    rflags: u64,
+    rsp: u64,
+    ss: u64,
 };
 
 pub const Context = packed struct {
@@ -138,11 +145,7 @@ pub const Context = packed struct {
     // In Long Mode, the error code is padded with zeros to form a 64-bit push, so that it can be popped like any other value.
 
     // CPU status
-    rip: u64,
-    cs: u64,
-    rflags: u64,
-    rsp: u64, // note: this will only be stored when privilege-level change
-    ss: u64, // note: this will only be stored when privilege-level change
+    ret_frame: IretFrame,
 };
 
 pub var idt: [idt_size]IdtEntry = undefined;
@@ -170,7 +173,6 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
             \\     push %rbx
             \\     push %rcx
             \\     push %rdx
-            \\     push %rsp
             \\     push %rbp
             \\     push %rsi
             \\     push %rdi
@@ -200,7 +202,6 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
             \\     pop %rdi
             \\     pop %rsi
             \\     pop %rbp
-            \\     pop %rsp
             \\     pop %rdx
             \\     pop %rcx
             \\     pop %rbx

@@ -60,7 +60,6 @@ var apicBase: ?[*]volatile u32 = null;
 var ioApicBase: ?[*]volatile u32 = null;
 
 pub fn enableLocalApic() !void {
-    asm volatile ("xchg %bx, %bx");
     var base = cpu.readMsr(IA32_APIC_BASE);
     base |= APIC_ENABLE_BIT;
     cpu.writeMsr(IA32_APIC_BASE, base);
