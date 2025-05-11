@@ -69,25 +69,14 @@ export fn _start() callconv(.C) noreturn {
 
     var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
     const allocator = gpa.allocator();
+    
+    const kernel_stack = cpu.getRsp();
 
-    var user_vmm = uvmm.VmAllocator.init(allocator, utils.MB(1), 0x00007FFFFFFFFFFF);
+    std.log.info("h", .{});
+    threads.createAndPopulateTask(allocator, &entry_code,kernel_stack, "task_1");
 
-    const user_pml4 = paging.createNewAddressSpace() catch unreachable;
-
-    cpu.setCr3(@intFromPtr(user_pml4) - @import("globals.zig").hhdm_offset);
-
-
-    const offset = TOTAL_SIZE - loop_code.len;
-    @memcpy(entry_code[offset..], &loop_code);
-
-
-
-    const entry_point = uheap.allocateUserExecutablePageWithCode(&user_vmm, user_pml4, &entry_code) catch unreachable;
-
-    const user_stack_bottom = uheap.allocateUserPages(&user_vmm, user_pml4, 1) catch unreachable;
-
-    const user_stack_top = user_stack_bottom + utils.PAGE_SIZE;
     std.log.info("hh", .{});
+    threads.createAndPopulateTask(allocator, &entry_code,kernel_stack, "task_2");
 
-    threads.enterUserMode(entry_point, user_stack_top, cpu.getRsp());
+    threads.enterUserMode();
 }

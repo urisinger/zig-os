@@ -88,7 +88,7 @@ pub const IdtEntry = packed struct(u128) {
     }
 };
 
-export var context: *volatile Context = undefined;
+pub export var context: *volatile Context = undefined;
 
 const idt_size = 256;
 
@@ -108,6 +108,7 @@ export fn interruptDispatch() void {
         @panic("Unhandled exeption");
     }
 }
+
 
 pub const Registers = packed struct {
     r15: u64 = 0,
@@ -142,7 +143,6 @@ pub const Context = packed struct {
     rflags: u64,
     rsp: u64, // note: this will only be stored when privilege-level change
     ss: u64, // note: this will only be stored when privilege-level change
-
 };
 
 pub var idt: [idt_size]IdtEntry = undefined;
@@ -212,7 +212,9 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
         break :scope struct {
             fn handle() callconv(.Naked) void {
                 asm volatile (save_status ::: "memory");
+                asm volatile ("call saveContext");
                 asm volatile ("call interruptDispatch");
+                asm volatile ("call contextSwitch"); // Found in threads/mod.zig
                 asm volatile (restore_status ::: "memory");
             }
         }.handle;
