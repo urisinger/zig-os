@@ -29,7 +29,7 @@ pub const Error = error {
 
 const KERNEL_VADDR_BASE: usize = 0xffff_8000_0000_0000;
 
-var base_kernel_pml4: ?*PageMapping = null;
+pub var base_kernel_pml4: ?*PageMapping = null;
 
 pub fn createNewAddressSpace() !*PageMapping {
     if (base_kernel_pml4 == null) {
@@ -54,15 +54,15 @@ pub fn init() Error!void {
 
     // Allocate a separate empty page for each top-half entry
     for (256..512) |i| {
-        const empty_page = try pmm.allocatePage();
-        const empty_page_ptr: [*]u8 = @ptrFromInt(empty_page + globals.hhdm_offset);
-        @memset(empty_page_ptr[0..utils.PAGE_SIZE], 0);
-
         const entry = &pml4.mappings[i];
+        const page = try pmm.allocatePage();
+        const page_ptr: [*]u32 = @ptrFromInt(page + globals.hhdm_offset);
+        @memset(page_ptr[0..1024], 0);
+
+        entry.* = @bitCast(page);
         entry.present = true;
-        entry.read_write = .read_write;
         entry.user_supervisor = .supervisor;
-        entry.addr = @intCast(empty_page >> 12);
+        entry.read_write = .read_write;
     }
 
     var base_physical = boot.params.?.kernel_base_physical;
@@ -100,6 +100,11 @@ pub fn init() Error!void {
     cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
     base_kernel_pml4 = pml4;
+
+    std.log.info("{x}" ,.{getPaddr(
+        @bitCast(@intFromPtr(base_kernel_pml4))
+    ) catch unreachable});
+
 
     log.info("initialized paging", .{});
 }

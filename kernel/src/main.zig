@@ -38,6 +38,8 @@ pub const std_options: std.Options = .{
     .log_level = .debug,
 };
 
+var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
+const allocator = gpa.allocator();
 
 const entry_code = [_]u8{
     0xf3, 0x90, // pause
@@ -68,8 +70,7 @@ export fn _start() callconv(.C) noreturn {
         @panic("PS/2 keyboard init failed");
     };
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
-    const allocator = gpa.allocator();
+
     
 
     std.log.info("h", .{});

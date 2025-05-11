@@ -112,65 +112,57 @@ pub fn createAndPopulateTask(
     };
 
 
-    std.log.info("0x{x}", .{@as(u64,@intFromPtr(task.pml4))});
+    std.log.info("{}", .{task.context.ret_frame});
+
+
 
     const task_entry = allocator.create(TaskQueueEntry) catch unreachable;
     task_entry.task = task;
     task_entry.next = task_entry;
 
 
-    std.log.info("0x{x}", .{@as(u64,@intFromPtr(task_entry.task.pml4))});
-
     insertTask(task_entry);
+
+
+    std.log.info("{}", .{current_task.?.task.context.ret_frame});
 }
 
 pub export fn enterUserMode() noreturn {
+    std.log.info("{}", .{current_task.?.task.context.ret_frame});
     const task = &current_task.?.task;
-    // Set up TSS to point to the kernel stack for this task
 
     tss.set_rsp(task.kernel_stack);
-    cpu.ltr(0x28); // Optional: only once after boot, not every time
+    cpu.ltr(0x28);
+
+    std.log.info("{}", .{@import("../memory/kernel/paging.zig").getPaddr(@bitCast(@intFromPtr(task.pml4))) catch unreachable});
+
+    std.log.info("{}", .{task.pml4.getPaddr(@bitCast(@intFromPtr(task.pml4))) catch unreachable});
 
     cpu.setCr3(@intFromPtr(task.pml4) - globals.hhdm_offset);
-    // Enable interrupts before entering user mode
+
+    std.log.info("0x{x}", .{cpu.getCr3()});
+
+
 
     cpu.sti();
 
-    const context: *u8 = @ptrCast(&task.context); // context_ptr is *Context
-    
-    asm volatile (
-        \\ mov %[ctx], %%rsp
-        \\ mov $0x23, %%ax
-        \\ mov %%ax, %%ds
-        \\ mov %%ax, %%es
-        \\ mov %%ax, %%fs
-        \\ mov %%ax, %%gs
-        \\ pop %%r15
-        \\ pop %%r14
-        \\ pop %%r13
-        \\ pop %%r12
-        \\ pop %%r11
-        \\ pop %%r10
-        \\ pop %%r9
-        \\ pop %%r8
-        \\ pop %%rdi
-        \\ pop %%rsi
-        \\ pop %%rbp
-        \\ pop %%rdx
-        \\ pop %%rcx
-        \\ pop %%rbx
-        \\ pop %%rax
-    
+    const frame = &task.context.ret_frame;
 
-    
-        \\ add $16, %%rsp
-        \\ xchg %%bx, %%bx
+    asm volatile (
+        \\ pushq %[ss]
+        \\ pushq %[rsp]
+        \\ pushq %[rflags]
+        \\ pushq %[cs]
+        \\ pushq %[rip]
         \\ iretq
         :
-        : [ctx] "r"(context)
-        : "memory", "rax"
+        : [ss] "r"(frame.ss),
+          [rsp] "r"(frame.rsp),
+          [rflags] "r"(frame.rflags),
+          [cs] "r"(frame.cs),
+          [rip] "r"(frame.rip)
+        : "memory"
     );
-
 
     unreachable;
 }

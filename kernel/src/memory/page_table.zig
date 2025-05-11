@@ -132,6 +132,9 @@ pub const PageMapping = extern struct {
         paddr: u64,
         flags: MmapFlags,
     ) Error!void {
+        if (!pml4.mappings[vaddr.pml4_idx].present){
+            std.log.err("not present pml4", .{});
+        }
         const pdp = try pml4.getOrCreate(vaddr.pml4_idx);
         const pd = try pdp.getOrCreate(vaddr.pdp_idx);
         const pt = try pd.getOrCreate(vaddr.pd_idx);
@@ -149,6 +152,9 @@ pub const PageMapping = extern struct {
         paddr: u64,
         flags: MmapFlags,
     ) Error!void {
+        if (!pml4.mappings[vaddr.pml4_idx].present){
+            std.log.err("not present pml4", .{});
+        }
         const pdp = try pml4.getOrCreate(vaddr.pml4_idx);
         const pd = try pdp.getOrCreate(vaddr.pdp_idx);
 
@@ -198,8 +204,14 @@ pub const PageMapping = extern struct {
     }
 
     pub fn getPaddr(pml4: *const PageMapping, vaddr: VirtualAddress) Error!u64 {
+        std.log.info("hh: 0x{x}",.{@intFromPtr(pml4)});
         const pdp = try pml4.getEntry(vaddr.pml4_idx);
+
+        std.log.info("hh",.{});
         const pd = try pdp.getEntry(vaddr.pdp_idx);
+        if (pd.mappings[vaddr.pd_idx].page_size == .large){
+            return (@as(u64,pd.mappings[vaddr.pd_idx].addr) << 21) + @as(u64, @bitCast((@as(u64, @bitCast(vaddr))  & ((1 << 21) - 1))));
+        }
         const pt = try pd.getEntry(vaddr.pd_idx);
         const entry = pt.mappings[vaddr.pt_idx];
 
@@ -208,7 +220,7 @@ pub const PageMapping = extern struct {
             return Error.EntryNotPresent;
         }
 
-        return entry.get_addr();
+        return entry.get_addr() + vaddr.offset;
     }
 
     fn getEntry(self: *const PageMapping, index: u9) Error!*PageMapping {
