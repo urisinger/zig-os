@@ -34,6 +34,9 @@ const paging = @import("memory/kernel/paging.zig");
 const uheap = @import("memory/user/heap.zig");
 const core = @import("core.zig");
 
+const elf_code align(@alignOf(std.elf.Elf64_Ehdr))= @embedFile("user_elf").*;
+const elf = @import("exec/efi.zig");
+
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
     .log_level = .debug,
@@ -43,6 +46,7 @@ const entry_code = [_]u8{
     0xf3, 0x90, // pause
     0xeb, 0xfd, // jmp $-3
 };
+
 
 export fn _start() callconv(.C) noreturn {
     cpu.cli();
@@ -58,7 +62,6 @@ export fn _start() callconv(.C) noreturn {
     framebuffer.init();
     console.init();
 
-
     apic.configureLocalApic() catch @panic("failed to init apic");
 
     ps2.init() catch @panic("failed to initilize ps2");
@@ -70,11 +73,15 @@ export fn _start() callconv(.C) noreturn {
 
     idt.init();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
-    const allocator = gpa.allocator();
+    const allocator = core.context().gpa.allocator();
 
-    scheduler.createAndPopulateTask(allocator, &entry_code, "task_1");
+    var user_vmm = uvmm.VmAllocator.init(allocator, utils.MB(1), 0x00007FFFFFFFFFFF);
 
-    scheduler.createAndPopulateTask(allocator, &entry_code, "task_2");
-    scheduler.enterUserMode();
+    const user_pml4 = paging.createNewAddressSpace() catch unreachable;
+
+    elf.loadEfi(&elf_code, user_pml4, &user_vmm) catch unreachable;
+
+    //scheduler.createAndPopulateTask(allocator, &entry_code, "task_1");
+    //scheduler.enterUserMode();
+    cpu.halt();
 }

@@ -78,7 +78,7 @@ pub const IdtEntry = packed struct(u128) {
         return IdtEntry{
             .offset_1 = @truncate(address),
             .offset_2 = @truncate((address >> 16)), // Mask to 48 bits
-            .selector = 0x8, 
+            .selector = 0x8,
             .gate_type = gate_type,
             .ring = ring,
             .present = true,
@@ -162,9 +162,7 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
         else
             "push $0b10000000000000000\n";
 
-        const push_num = std.fmt.comptimePrint(
-            "push ${} \n"
-        , .{num});
+        const push_num = std.fmt.comptimePrint("push ${} \n", .{num});
 
         break :scope struct {
             fn handle() callconv(.Naked) void {
@@ -174,18 +172,18 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
                 cpu.push_gpr();
 
                 asm volatile (
-                   \\ mov %rsp, %rdi
-                   \\ call interruptDispatch
-                   \\ mov %rax, %rsp
+                    \\ mov %rsp, %rdi
+                    \\ call interruptDispatch
+                    \\ mov %rax, %rsp
                 );
 
                 cpu.pop_gpr();
 
-                asm volatile ("add $16, %rsp" :::);
+                asm volatile ("add $16, %rsp");
 
                 cpu.swapgs_if_necessary();
 
-                asm volatile ("iretq" :::);
+                asm volatile ("iretq");
             }
         }.handle;
     };

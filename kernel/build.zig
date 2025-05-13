@@ -1,8 +1,5 @@
 const std = @import("std");
 
-const image_name = "kernel-image";
-const iso_root = "iso_root";
-
 pub fn build(b: *std.Build) !void {
     const arch = b.option(std.Target.Cpu.Arch, "arch", "The target kernel architecture") orelse .x86_64;
 
@@ -49,6 +46,18 @@ pub fn build(b: *std.Build) !void {
 
     const target = b.resolveTargetQuery(target_query);
     const optimize = b.standardOptimizeOption(.{});
+
+    const user = b.addExecutable(.{
+        .name = "user_elf",
+        .root_source_file = b.path("user_src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .code_model = .default,
+    });
+
+    
+
+    const limine = b.dependency("limine", .{});
     const kernel = b.addExecutable(.{
         .name = "kernel",
         .root_source_file = b.path("src/main.zig"),
@@ -61,8 +70,14 @@ pub fn build(b: *std.Build) !void {
 
     kernel.want_lto = false;
 
-    const limine = b.dependency("limine", .{});
+    const user_module = b.createModule(.{.root_source_file = user.getEmittedBin()});
+
+    try user_module.depending_steps.put(b.allocator, user, {});
+
     kernel.root_module.addImport("limine", limine.module("limine"));
+    kernel.root_module.addImport("user_elf", user_module);
+
+    kernel.step.dependOn(&user.step);
 
     b.installArtifact(kernel);
 
@@ -74,10 +89,16 @@ pub fn build(b: *std.Build) !void {
         .code_model = code_model,
     });
 
+
+    const user_check_module = b.createModule(.{.root_source_file = b.path("src/main.zig")});
+
     kernel_check.setLinkerScriptPath(linker_script_path);
 
     kernel_check.want_lto = false;
     kernel_check.root_module.addImport("limine", limine.module("limine"));
+
+    // just set it to a random file
+    kernel_check.root_module.addImport("user_elf", user_check_module);
 
     const check = b.step("check", "Check if foo compiles");
     check.dependOn(&kernel_check.step);

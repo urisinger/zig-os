@@ -28,19 +28,11 @@ pub fn init() !void {
 }
 
 pub const DriverState = struct {
-    shift: bool = false,
-    ctrl: bool = false,
-    alt: bool = false,
-
-    pub fn handleScancode(self: *DriverState, scancode: u8) ?KeyCode {
+    pub fn handleScancode(_: *DriverState, scancode: u8) ?KeyCode {
         const released = (scancode & 0x80) != 0;
         const code = scancode & 0x7F;
 
         return switch (code) {
-            0x2A, 0x36 => blk: {
-                self.shift = !released;
-                break :blk null;
-            },
             0x1C => if (!released) .Enter else null,
             0x0E => if (!released) .Backspace else null,
             0x10 => if (!released) .Q else null,

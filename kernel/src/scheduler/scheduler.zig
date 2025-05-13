@@ -30,12 +30,9 @@ pub const TaskQueueEntry = struct {
     name: ?[]const u8,
 };
 
-pub const Scheduler = struct {
-    task_qeueue: ?*TaskQueueEntry
-};
+pub const Scheduler = struct { task_qeueue: ?*TaskQueueEntry };
 
-
-pub fn saveContext(constext: *idt.Context) void{
+pub fn saveContext(constext: *idt.Context) void {
     const scheduler = core.context().scheduler;
     const cur_task = scheduler.task_qeueue.?;
     cur_task.task.context = constext;
@@ -45,7 +42,7 @@ pub fn schedulerTick() callconv(.SysV) *idt.Context {
     return nextTask();
 }
 
-fn nextTask() *idt.Context{
+fn nextTask() *idt.Context {
     const context = core.context();
     const scheduler = &context.scheduler;
     const current_task = scheduler.task_qeueue.?;
@@ -143,8 +140,7 @@ pub export fn enterUserMode() noreturn {
 
     cpu.setCr3(@intFromPtr(task.pml4) - globals.hhdm_offset);
 
-
-    const context: *idt.Context= @ptrFromInt(task.kernel_stack - @sizeOf(idt.Context));
+    const context: *idt.Context = @ptrFromInt(task.kernel_stack - @sizeOf(idt.Context));
 
     const frame = &context.ret_frame;
     asm volatile (

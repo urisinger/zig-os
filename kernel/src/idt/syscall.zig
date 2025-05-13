@@ -4,7 +4,7 @@ pub export fn syscall_dispatch() callconv(.SysV) void {
 }
 
 pub fn syscall_handler() callconv(.Naked) void {
-    asm volatile  (
+    asm volatile (
         \\ swapgs                  ; switch GS base to kernel
         \\ push %r11                ; save RFLAGS
         \\ push %rcx                ; save RIP (return address)
@@ -19,6 +19,4 @@ pub fn syscall_handler() callconv(.Naked) void {
     );
 }
 
-pub fn init() void{
-
-}
+pub fn init() void {}
