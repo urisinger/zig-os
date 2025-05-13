@@ -67,7 +67,8 @@ fn nextTask() *idt.Context{
 }
 
 fn insertTask(new_task: *TaskQueueEntry) void {
-    const scheduler = &core.context().scheduler;
+    const context = core.context();
+    const scheduler = &context.scheduler;
     const current_task = scheduler.task_qeueue;
 
     if (current_task) |task| {
@@ -76,6 +77,7 @@ fn insertTask(new_task: *TaskQueueEntry) void {
     } else {
         new_task.next = new_task;
         scheduler.task_qeueue = new_task;
+        context.current_task = new_task.task;
     }
 }
 
@@ -108,10 +110,10 @@ pub fn createAndPopulateTask(
         .error_code = 0,
         .ret_frame = .{
             .rip = entry_point,
-            .cs = 0x18 | 0x3,
+            .cs = 0x20 | 0x3,
             .rsp = user_stack_top,
             .rflags = 0x202,
-            .ss = 0x20 | 0x3,
+            .ss = 0x18 | 0x3,
         },
     };
 
@@ -149,7 +151,7 @@ pub export fn enterUserMode() noreturn {
     const frame = &context.ret_frame;
     asm volatile (
         \\ swapgs
-        \\ mov $0x23, %ax
+        \\ mov $0x1B, %ax
         \\ mov %ax, %ds
         \\ mov %ax, %es
         \\ pushq %[ss]

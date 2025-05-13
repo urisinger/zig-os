@@ -34,14 +34,16 @@ const paging = @import("memory/kernel/paging.zig");
 const uheap = @import("memory/user/heap.zig");
 const core = @import("core.zig");
 
+const syscall = @import("idt/syscall.zig");
+
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
     .log_level = .debug,
 };
 
 const entry_code = [_]u8{
-    0xf3, 0x90, // pause
-    0xeb, 0xfd, // jmp $-3
+    0x0F, 0x05, // pause
+    0xeb, 0xfc, // jmp $-3
 };
 
 export fn _start() callconv(.C) noreturn {
@@ -76,5 +78,6 @@ export fn _start() callconv(.C) noreturn {
     scheduler.createAndPopulateTask(allocator, &entry_code, "task_1");
 
     scheduler.createAndPopulateTask(allocator, &entry_code, "task_2");
+    syscall.init();
     scheduler.enterUserMode();
 }

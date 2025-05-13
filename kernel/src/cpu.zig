@@ -116,7 +116,7 @@ pub fn push_gpr() callconv(.Inline) void{
         \\     push %r13
         \\     push %r14
         \\     push %r15
-        :::);
+        );
 }
 
 pub fn pop_gpr() callconv(.Inline) void{
@@ -136,7 +136,7 @@ pub fn pop_gpr() callconv(.Inline) void{
         \\     pop %rcx
         \\     pop %rbx
         \\     pop %rax
-        :::);
+        );
 }
 
 pub inline fn writeMsr(msr: u64, value: u64) void {
