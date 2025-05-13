@@ -79,6 +79,6 @@ pub fn build(b: *std.Build) !void {
     kernel_check.want_lto = false;
     kernel_check.root_module.addImport("limine", limine.module("limine"));
 
-    const check = b.step("check", "Check if foo compiles");
+    const check = b.step("check", "Check if kernel compiles");
     check.dependOn(&kernel_check.step);
 }

@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.idt);
 const utils = @import("../utils.zig");
 const gdt = @import("../gdt.zig");
 
@@ -101,7 +102,7 @@ export fn interruptDispatch(context: *Context) callconv(.SysV) *Context {
     if (handlers[context.interrupt_num]) |handler| {
         handler(context);
     } else {
-        std.log.err("Unhandled expetion 0x{X} err=0b{b}", .{ context.interrupt_num, @as(u32, @intCast(context.error_code)) });
+        log.err("Unhandled expetion 0x{X} err=0b{b}", .{ context.interrupt_num, @as(u32, @intCast(context.error_code)) });
         @panic("Unhandled exeption");
     }
     return scheduler.schedulerTick();

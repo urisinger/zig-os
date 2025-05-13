@@ -90,7 +90,7 @@ pub inline fn readMsr(msr: u64) u64 {
     return (high << 32) | low;
 }
 
-pub fn swapgs_if_necessary() callconv(.Inline) void{
+pub inline fn swapgs_if_necessary() void{
        asm volatile(
         \\ cmpw $0x08, 0x8(%rsp)
         \\ je 1f 
@@ -99,7 +99,7 @@ pub fn swapgs_if_necessary() callconv(.Inline) void{
        :::);
 }
 
-pub fn push_gpr() callconv(.Inline) void{
+pub inline fn push_gpr()  void{
        asm volatile(
         \\     push %rax
         \\     push %rbx
@@ -119,7 +119,7 @@ pub fn push_gpr() callconv(.Inline) void{
         );
 }
 
-pub fn pop_gpr() callconv(.Inline) void{
+pub inline fn pop_gpr() void{
     asm volatile( 
         \\     pop %r15
         \\     pop %r14

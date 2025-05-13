@@ -10,7 +10,7 @@ const boot = @import("../../boot.zig");
 const cpu = @import("../../cpu.zig");
 
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.kpaging);
 
 pub const Error = error{
     PageAlreadyMapped,

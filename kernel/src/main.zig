@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.main);
 
 const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false });
 
@@ -66,7 +66,7 @@ export fn _start() callconv(.C) noreturn {
     ps2.init() catch @panic("failed to initilize ps2");
 
     ps2_keyboard.init() catch |err| {
-        std.log.err("Failed to initialize PS/2 keyboard: {}", .{err});
+        log.err("Failed to initialize PS/2 keyboard: {}", .{err});
         @panic("PS/2 keyboard init failed");
     };
 

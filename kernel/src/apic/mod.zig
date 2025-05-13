@@ -1,6 +1,7 @@
 const cpu = @import("../cpu.zig");
 const globals = @import("../globals.zig");
 const std = @import("std");
+const log = std.log.scoped(.apic);
 
 const vmm = @import("../memory/kernel/vmm.zig");
 
@@ -126,7 +127,7 @@ pub fn configureLocalApic() !void {
     redir_entry_count = (readIoRegister(IOAPICVER) >> 16) + 1;
 
     // Log the detected APIC ID, version, and redirection entry count
-    std.log.info("apic_ID: 0x{x}, apic_ver: 0x{x}", .{ apic_id, apic_ver });
+    log.info("apic_ID: 0x{x}, apic_ver: 0x{x}", .{ apic_id, apic_ver });
 
     // Configure a redirection entry for IRQ 1 (typically keyboard) to vector 0x20 (interrupt handler)
     writeRedirEntry(0x1, RedirectionEntry{

@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.scheduler);
 
 const cpu = @import("../cpu.zig");
 const tss = @import("../tss.zig");
@@ -53,7 +54,7 @@ fn nextTask() *idt.Context{
     const next_task = current_task.next;
 
     if (next_task.name) |name| {
-        std.log.info("switching to task: {s}", .{name});
+        log.info("switching to task: {s}", .{name});
     }
 
     tss.set_rsp(next_task.task.kernel_stack);

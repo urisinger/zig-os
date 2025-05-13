@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.pmm);
 
 const utils = @import("../utils.zig");
 
