@@ -5,12 +5,13 @@ const std = @import("std");
 
 const CoreContext = struct{
     self: *CoreContext,
+    cur_stack: u64,
     current_task: *scheduler.Task,
     scheduler: scheduler.Scheduler
 };
 
-pub fn context() *CoreContext{
-    return @ptrFromInt(asm volatile ("mov %%gs:0, %[ret]"
+pub fn context() callconv(.Inline) *CoreContext{
+    return @ptrFromInt(asm volatile ("mov %gs:0, %[ret]"
         : [ret] "=r" (-> u64),
     ));
 }

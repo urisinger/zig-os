@@ -79,5 +79,5 @@ export fn _start() callconv(.C) noreturn {
 
     scheduler.createAndPopulateTask(allocator, &entry_code, "task_2");
     syscall.init();
-    scheduler.enterUserMode();
+    scheduler.start();
 }

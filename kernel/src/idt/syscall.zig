@@ -7,9 +7,10 @@ pub export fn syscall_dispatch() callconv(.SysV) void {
 pub fn syscall_handler() callconv(.Naked) void {
     asm volatile  (
         \\ swapgs
-        \\ xchg %bx, %bx
+        \\ mov %gs:8, %rsp
         \\ push %r11
-        \\ push %rcx            
+        \\ push %rcx
+        \\ sti
         \\ call syscall_dispatch
         \\ pop %rcx                 
         \\ pop %r11                
@@ -29,6 +30,6 @@ pub fn init() void {
     // Enable syscall/sysret
     cpu.writeMsr(MSR_EFER, cpu.readMsr(MSR_EFER) | EFER_SCE);
     cpu.writeMsr(MSR_LSTAR, @intFromPtr(&syscall_handler));
-    cpu.writeMsr(MSR_STAR, (0x0013000800000000)); // Kernel CS/SS = 0x08, user = 0x1B
+    cpu.writeMsr(MSR_STAR, 0x13 << 48 | 0x8 << 32); // Kernel CS/SS = 0x08, user = 0x1B
     cpu.writeMsr(MSR_FMASK, 0x300); // Disable IF and TF during syscall
 }

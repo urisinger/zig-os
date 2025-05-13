@@ -57,6 +57,7 @@ fn nextTask() *idt.Context{
     }
 
     tss.set_rsp(next_task.task.kernel_stack);
+    context.cur_stack = next_task.task.kernel_stack;
 
     cpu.setCr3(@intFromPtr(next_task.task.pml4) - globals.hhdm_offset);
 
@@ -78,6 +79,7 @@ fn insertTask(new_task: *TaskQueueEntry) void {
         new_task.next = new_task;
         scheduler.task_qeueue = new_task;
         context.current_task = new_task.task;
+        context.cur_stack = new_task.task.kernel_stack;
     }
 }
 
@@ -135,7 +137,7 @@ pub fn createAndPopulateTask(
     insertTask(task_entry);
 }
 
-pub export fn enterUserMode() noreturn {
+pub export fn start() noreturn {
     const scheduler = core.context().scheduler;
     const current_task = scheduler.task_qeueue.?;
     const task = current_task.task;
