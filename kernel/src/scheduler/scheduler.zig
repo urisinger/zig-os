@@ -145,7 +145,6 @@ pub export fn enterUserMode() noreturn {
 
     cpu.setCr3(@intFromPtr(task.pml4) - globals.hhdm_offset);
 
-
     const context: *idt.Context= @ptrFromInt(task.kernel_stack - @sizeOf(idt.Context));
 
     const frame = &context.ret_frame;

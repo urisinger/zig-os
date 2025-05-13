@@ -182,7 +182,7 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
                    \\ call interruptDispatch
                    \\ mov %rax, %rsp
 
-                   \\ mov $0x23, %ax 
+                   \\ mov $0x1B, %ax 
                    \\ mov %ax, %ds
                    \\ mov %ax, %es 
                 );
