@@ -54,7 +54,6 @@ pub fn readData() Error!u8 {
     return inb(PS2_DATA);
 }
 
-
 fn enableDevice(port: u8) Error!void {
     switch (port) {
         1 => try sendCommand(0xAE), // Enable first PS/2 port
@@ -115,7 +114,6 @@ pub fn writeDataToPort(port: u8, data: u8) Error!void {
         else => return Error.InvalidPort,
     }
 }
-
 
 pub fn enableInterrupt(port: u8) !void {
     try sendCommand(0x20); // read config byte
@@ -178,7 +176,6 @@ pub fn init() Error!void {
     }
 
     try enableAndResetDevices();
-
 
     log.info("Initialized PS/2 driver", .{});
 }

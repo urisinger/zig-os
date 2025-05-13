@@ -79,7 +79,6 @@ pub const BitmapAllocator = struct {
                     remaining_pages = num_pages;
                     start_page = (word_index * 32 + bit_position + 1);
                 }
-
             }
         }
 

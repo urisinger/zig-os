@@ -9,7 +9,6 @@ pub const PAGE_SIZE = KB(4);
 // 2mb
 pub const LARGE_PAGE_SIZE = MB(2);
 
-
 pub const BYTES_PER_KB = 1024;
 pub const BYTES_PER_MB = 1024 * 1024;
 pub const BYTES_PER_GB = 1024 * 1024 * 1024;
@@ -26,10 +25,9 @@ pub fn GB(gb: u64) u64 {
     return gb * BYTES_PER_GB;
 }
 
-
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, _: ?usize) noreturn {
     @setCold(true);
-    log.err("PANIC: {s}\n", .{msg});
+    log.err("KERNEL PANIC: {s}\n", .{msg});
 
     if (error_return_trace) |trace| {
         log.err("stacktrace: {}", .{trace.*});

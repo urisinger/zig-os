@@ -62,13 +62,13 @@ pub const VmAllocator = struct {
 
     pub fn destroy(self: *VmAllocator) void {
         var current = self.head;
-    
+
         while (current) |region| {
             const next = region.next;
             self.allocator.destroy(region);
             current = next;
         }
-    
+
         self.head = null;
         self.tail = null;
     }

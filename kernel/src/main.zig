@@ -32,28 +32,27 @@ const threads = @import("threads/mod.zig");
 
 const paging = @import("memory/kernel/paging.zig");
 const uheap = @import("memory/user/heap.zig");
+const core = @import("core.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
     .log_level = .debug,
 };
 
-var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
-const allocator = gpa.allocator();
-
 const entry_code = [_]u8{
     0xf3, 0x90, // pause
     0xeb, 0xfd, // jmp $-3
 };
 
-
 export fn _start() callconv(.C) noreturn {
-    const kernel_stack = @frameAddress();
     cpu.cli();
+
     logger.init();
     boot.init();
 
     gdt.init();
+    core.init();
+
     kheap.init();
 
     framebuffer.init();
@@ -70,14 +69,11 @@ export fn _start() callconv(.C) noreturn {
         @panic("PS/2 keyboard init failed");
     };
 
+    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
+    const allocator = gpa.allocator();
 
-    
+    threads.createAndPopulateTask(allocator, &entry_code, "task_1");
 
-    std.log.info("h", .{});
-    threads.createAndPopulateTask(allocator, &entry_code,kernel_stack, "task_1");
-
-    std.log.info("hh", .{});
-    threads.createAndPopulateTask(allocator, &entry_code,kernel_stack, "task_2");
-
+    threads.createAndPopulateTask(allocator, &entry_code, "task_2");
     threads.enterUserMode();
 }

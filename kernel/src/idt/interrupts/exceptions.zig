@@ -97,27 +97,14 @@ pub fn securityException(_: *volatile idt.Context) void {
     @panic("Unhandled security exception.");
 }
 
-
 pub fn dumpRegisters(ctx: *const idt.Context) void {
     std.log.err("------ Register Dump ------", .{});
-    std.log.err("RAX=0x{x} RBX=0x{x} RCX=0x{x} RDX=0x{x}", .{
-        ctx.registers.rax, ctx.registers.rbx, ctx.registers.rcx, ctx.registers.rdx
-    });
-    std.log.err("RSI=0x{x} RDI=0x{x} RBP=0x{x} RSP=0x{x}", .{
-        ctx.registers.rsi, ctx.registers.rdi, ctx.registers.rbp, ctx.ret_frame.rsp
-    });
-    std.log.err("R8 =0x{x} R9 =0x{x} R10=0x{x} R11=0x{x}", .{
-        ctx.registers.r8, ctx.registers.r9, ctx.registers.r10, ctx.registers.r11
-    });
-    std.log.err("R12=0x{x} R13=0x{x} R14=0x{x} R15=0x{x}", .{
-        ctx.registers.r12, ctx.registers.r13, ctx.registers.r14, ctx.registers.r15
-    });
-    std.log.err("RIP=0x{x} CS=0x{x} RFLAGS=0x{x}", .{
-        ctx.ret_frame.rip, ctx.ret_frame.cs, ctx.ret_frame.rflags
-    });
+    std.log.err("RAX=0x{x} RBX=0x{x} RCX=0x{x} RDX=0x{x}", .{ ctx.registers.rax, ctx.registers.rbx, ctx.registers.rcx, ctx.registers.rdx });
+    std.log.err("RSI=0x{x} RDI=0x{x} RBP=0x{x} RSP=0x{x}", .{ ctx.registers.rsi, ctx.registers.rdi, ctx.registers.rbp, ctx.ret_frame.rsp });
+    std.log.err("R8 =0x{x} R9 =0x{x} R10=0x{x} R11=0x{x}", .{ ctx.registers.r8, ctx.registers.r9, ctx.registers.r10, ctx.registers.r11 });
+    std.log.err("R12=0x{x} R13=0x{x} R14=0x{x} R15=0x{x}", .{ ctx.registers.r12, ctx.registers.r13, ctx.registers.r14, ctx.registers.r15 });
+    std.log.err("RIP=0x{x} CS=0x{x} RFLAGS=0x{x}", .{ ctx.ret_frame.rip, ctx.ret_frame.cs, ctx.ret_frame.rflags });
     std.log.err("SS=0x{x} (only valid on CPL change)", .{ctx.ret_frame.ss});
-    std.log.err("Interrupt=0x{x}  Error Code=0x{x}", .{
-        ctx.interrupt_num, ctx.error_code
-    });
+    std.log.err("Interrupt=0x{x}  Error Code=0x{x}", .{ ctx.interrupt_num, ctx.error_code });
     std.log.err("---------------------------", .{});
 }

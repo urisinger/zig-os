@@ -3,7 +3,6 @@ pub const PageMapping = page_table.PageMapping;
 pub const VirtualAddress = page_table.VirtualAddress;
 pub const MmapFlags = page_table.MmapFlags;
 
-
 const pmm = @import("../pmm.zig");
 const globals = @import("../../globals.zig");
 const utils = @import("../../utils.zig");
@@ -13,7 +12,7 @@ const cpu = @import("../../cpu.zig");
 const std = @import("std");
 const log = std.log;
 
-pub const Error = error {
+pub const Error = error{
     PageAlreadyMapped,
     Pml4NotInitialized,
     EntryNotPresent,
@@ -25,7 +24,6 @@ pub const Error = error {
     InvalidOperation,
     AllocatorNotInitialized,
 };
-
 
 const KERNEL_VADDR_BASE: usize = 0xffff_8000_0000_0000;
 
@@ -96,15 +94,11 @@ pub fn init() Error!void {
 
     try mapAllMemory(pml4);
 
-
     cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
     base_kernel_pml4 = pml4;
 
-    std.log.info("{x}" ,.{getPaddr(
-        @bitCast(@intFromPtr(base_kernel_pml4))
-    ) catch unreachable});
-
+    std.log.info("{x}", .{getPaddr(@bitCast(@intFromPtr(base_kernel_pml4))) catch unreachable});
 
     log.info("initialized paging", .{});
 }

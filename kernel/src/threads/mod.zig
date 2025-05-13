@@ -5,6 +5,7 @@ const tss = @import("../tss.zig");
 const page_table = @import("../memory/page_table.zig");
 const VmaAllocator = @import("../memory/user/vmm.zig").VmAllocator;
 
+const kheap = @import("../memory/kernel/heap.zig");
 const idt = @import("../idt/idt.zig");
 
 const paging = @import("../memory/kernel/paging.zig");
@@ -13,64 +14,71 @@ const utils = @import("../utils.zig");
 const uheap = @import("../memory/user/heap.zig");
 
 const globals = @import("../globals.zig");
-const Task = struct{
-    context: idt.Context,
+
+const core = @import("../core.zig");
+
+pub const Task = struct {
+    context: *idt.Context,
     pml4: *page_table.PageMapping,
     vma: VmaAllocator,
     kernel_stack: u64,
-
-    name: ?[]const u8,
-
 };
 
-const TaskQueueEntry = struct{
-    task: Task,
+pub const TaskQueueEntry = struct {
+    task: *Task,
     next: *TaskQueueEntry,
+    name: ?[]const u8,
 };
 
-export var current_task: ?*TaskQueueEntry = undefined;
+pub const Scheduler = struct {
+    task_qeueue: ?*TaskQueueEntry
+};
 
 
-export fn saveContext() callconv(.C) void {
-    if (current_task) |cur_task| {
-        const context_ptr: [*]volatile const u8 = @ptrCast(idt.context);
-        const dest_ptr: [*]u8 = @ptrCast(&cur_task.task.context);
-
-        @memcpy(
-            dest_ptr[0..@sizeOf(idt.Context)],
-            context_ptr[0..@sizeOf(idt.Context)],
-        );
-    }
+pub fn saveContext(constext: *idt.Context) void{
+    const scheduler = core.context().scheduler;
+    const cur_task = scheduler.task_qeueue.?;
+    cur_task.task.context = constext;
 }
 
+export fn schedulerTick() callconv(.SysV) *idt.Context {
+    return nextThead();
+}
 
-export fn contextSwitch() callconv(.C) void{
-    if (current_task) |cur_task|{
-        current_task = cur_task.next;
+pub fn nextThead() *idt.Context{
+    const scheduler = &core.context().scheduler;
+    const current_task = scheduler.task_qeueue.?;
 
-        cpu.setCr3(@intFromPtr(cur_task.next.task.pml4) - globals.hhdm_offset);
-        idt.context.* = cur_task.next.task.context;
+    const next_task = current_task.next;
 
-        if (cur_task.next.task.name) |name|{
-            std.log.info("switching to task: {s}", .{name});
-        }
+    if (next_task.name) |name| {
+        std.log.info("switching to task: {s}", .{name});
     }
+
+    tss.set_rsp(next_task.task.kernel_stack);
+
+    cpu.setCr3(@intFromPtr(next_task.task.pml4) - globals.hhdm_offset);
+
+    scheduler.task_qeueue = next_task;
+    return next_task.task.context;
 }
 
 pub fn insertTask(new_task: *TaskQueueEntry) void {
-    if (current_task) |task|{
+    const scheduler = &core.context().scheduler;
+    const current_task = scheduler.task_qeueue;
+
+    if (current_task) |task| {
         new_task.next = task.next;
         task.next = new_task;
-    } else{
+    } else {
         new_task.next = new_task;
-        current_task = new_task;
+        scheduler.task_qeueue = new_task;
     }
 }
 
 pub fn createAndPopulateTask(
     allocator: std.mem.Allocator,
     entry_code: []const u8,
-    kernel_stack: u64,
     name: []const u8,
 ) void {
     var user_vmm = uvmm.VmAllocator.init(allocator, utils.MB(1), 0x00007FFFFFFFFFFF);
@@ -83,84 +91,77 @@ pub fn createAndPopulateTask(
         entry_code,
     ) catch unreachable;
 
-
     const user_stack_bottom = uheap.allocateUserPages(&user_vmm, user_pml4, 1) catch unreachable;
     const user_stack_top = user_stack_bottom + utils.PAGE_SIZE;
 
-    const context = idt.Context{
-        .registers = .{
-        },
+    const kernel_stack = kheap.allocatePages(2) catch unreachable;
+
+    const kernel_stack_top = kernel_stack + 2 * utils.PAGE_SIZE;
+    const context_ptr: *idt.Context = @ptrFromInt(kernel_stack_top - @sizeOf(idt.Context));
+
+    context_ptr.* = idt.Context{
+        .registers = .{},
         .interrupt_num = 0,
         .error_code = 0,
         .ret_frame = .{
             .rip = entry_point,
             .cs = 0x18 | 0x3,
-            .rflags = 0x202,
             .rsp = user_stack_top,
+            .rflags = 0x202,
             .ss = 0x20 | 0x3,
         },
     };
 
+    const task = allocator.create(Task) catch unreachable;
 
-
-    const task = Task{
+    task.* = Task{
+        .context = context_ptr,
         .vma = user_vmm,
         .pml4 = user_pml4,
-        .context = context,
-        .kernel_stack = kernel_stack,
-        .name = name,
+        .kernel_stack = kernel_stack_top,
     };
 
-
-    std.log.info("{}", .{task.context.ret_frame});
-
-
-
     const task_entry = allocator.create(TaskQueueEntry) catch unreachable;
+
     task_entry.task = task;
     task_entry.next = task_entry;
-
+    task_entry.name = name;
 
     insertTask(task_entry);
-
-
-    std.log.info("{}", .{current_task.?.task.context.ret_frame});
 }
 
 pub export fn enterUserMode() noreturn {
-    std.log.info("{}", .{current_task.?.task.context.ret_frame});
-    const task = &current_task.?.task;
+    const scheduler = core.context().scheduler;
+    const current_task = scheduler.task_qeueue.?;
+    const task = current_task.task;
 
     tss.set_rsp(task.kernel_stack);
     cpu.ltr(0x28);
 
-    std.log.info("{}", .{@import("../memory/kernel/paging.zig").getPaddr(@bitCast(@intFromPtr(task.pml4))) catch unreachable});
-
-    std.log.info("{}", .{task.pml4.getPaddr(@bitCast(@intFromPtr(task.pml4))) catch unreachable});
-
     cpu.setCr3(@intFromPtr(task.pml4) - globals.hhdm_offset);
 
-    std.log.info("0x{x}", .{cpu.getCr3()});
 
+    const context: *idt.Context= @ptrFromInt(task.kernel_stack - @sizeOf(idt.Context));
 
-
-    cpu.sti();
-
-    const frame = &task.context.ret_frame;
-
+    const frame = &context.ret_frame;
     asm volatile (
+        \\ swapgs
+        \\ mov $0x23, %ax
+        \\ mov %ax, %ds
+        \\ mov %ax, %es
         \\ pushq %[ss]
         \\ pushq %[rsp]
         \\ pushq %[rflags]
         \\ pushq %[cs]
         \\ pushq %[rip]
+        \\ sti
         \\ iretq
         :
-        : [ss] "r"(frame.ss),
-          [rsp] "r"(frame.rsp),
-          [rflags] "r"(frame.rflags),
-          [cs] "r"(frame.cs),
-          [rip] "r"(frame.rip)
+        : [ss] "r" (frame.ss),
+          [rsp] "r" (frame.rsp),
+          [rflags] "r" (frame.rflags),
+          [cs] "r" (frame.cs),
+          [rip] "r" (frame.rip),
         : "memory"
     );
 

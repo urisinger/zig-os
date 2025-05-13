@@ -18,6 +18,6 @@ pub const Tss = packed struct {
 
 pub var tss: Tss align(16) = .{};
 
-pub fn set_rsp(rsp: u64) void{
+pub fn set_rsp(rsp: u64) void {
     tss.rsp0 = rsp;
 }

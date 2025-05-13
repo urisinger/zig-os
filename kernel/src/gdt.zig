@@ -1,53 +1,30 @@
 const cpu = @import("cpu.zig");
 const tss = @import("tss.zig");
 
-
-
 pub var table = [_]GdtEntry{
     GdtEntry.empty(),
 
-    GdtEntry.init(
-        0,
-        0,
-        GdtAccess.code(.Ring0),
-        GdtFlags{ .long_mode = true, .granularity_4k = true }
-    ),
-    GdtEntry.init(
-        0,
-        0,
-        GdtAccess.data(.Ring0),
-        GdtFlags{ .long_mode = true, .granularity_4k = true }
-    ),
+    GdtEntry.init(0, 0, GdtAccess.code(.Ring0), GdtFlags{ .long_mode = true, .granularity_4k = true }),
+    GdtEntry.init(0, 0, GdtAccess.data(.Ring0), GdtFlags{ .long_mode = true, .granularity_4k = true }),
 
-    GdtEntry.init(
-        0,
-        0,
-        GdtAccess.code(.Ring3),
-        GdtFlags{ .long_mode = true, .granularity_4k = true }
-    ),
-    GdtEntry.init(
-        0,
-        0,
-        GdtAccess.data(.Ring3),
-        GdtFlags{ .long_mode = true, .granularity_4k = true }
-    ),
+    GdtEntry.init(0, 0, GdtAccess.code(.Ring3), GdtFlags{ .long_mode = true, .granularity_4k = true }),
+    GdtEntry.init(0, 0, GdtAccess.data(.Ring3), GdtFlags{ .long_mode = true, .granularity_4k = true }),
 
     // Tss
     GdtEntry.empty(),
     GdtEntry.empty(),
 };
 
-
 pub fn init() void {
-   table[5] = GdtEntry.init(
+    table[5] = GdtEntry.init(
         @truncate(@intFromPtr(&tss.tss)),
         @sizeOf(tss.Tss) - 1,
-        @bitCast(@as(u8,0x89)),
+        @bitCast(@as(u8, 0x89)),
         @bitCast(@as(u4, 0)),
     );
 
     // TSS descriptor high part (manual encoding)
-    table[6] = @bitCast(((@as(u64, @intFromPtr(&tss.tss)) >> 32) & 0xFFFFFFFF) );
+    table[6] = @bitCast(((@as(u64, @intFromPtr(&tss.tss)) >> 32) & 0xFFFFFFFF));
 
     const gdtr = GdtDescriptor{
         .size = @sizeOf(GdtEntry) * table.len,
@@ -58,15 +35,15 @@ pub fn init() void {
 
     // Inline assembly to flush segment registers
     asm volatile (
-        \\  mov $0x10, %%ax
-        \\  mov %%ax, %%ds
-        \\  mov %%ax, %%es
-        \\  mov %%ax, %%fs
-        \\  mov %%ax, %%gs
-        \\  mov %%ax, %%ss
+        \\  mov $0x10, %ax
+        \\  mov %ax, %ds
+        \\  mov %ax, %es
+        \\  mov %ax, %fs
+        \\  mov %ax, %gs
+        \\  mov %ax, %ss
         \\  pushq $0x08
-        \\  lea 1f(%%rip), %%rax
-        \\  push %%rax
+        \\  lea 1f(%rip), %rax
+        \\  push %rax
         \\  lretq
         \\  1:
     );
@@ -113,9 +90,9 @@ pub const GdtFlags = packed struct(u4) {
 
     pub fn toBits(self: GdtFlags) u4 {
         return (@as(u4, @intFromBool(self.avl)) << 0) |
-               (@as(u4, @intFromBool(self.long_mode)) << 1) |
-               (@as(u4, @intFromBool(self.default_size_32bit)) << 2) |
-               (@as(u4, @intFromBool(self.granularity_4k)) << 3);
+            (@as(u4, @intFromBool(self.long_mode)) << 1) |
+            (@as(u4, @intFromBool(self.default_size_32bit)) << 2) |
+            (@as(u4, @intFromBool(self.granularity_4k)) << 3);
     }
 };
 
@@ -130,12 +107,12 @@ pub const GdtAccess = packed struct(u8) {
 
     pub fn toByte(self: GdtAccess) u8 {
         return (@as(u8, @intFromBool(self.accessed)) << 0) |
-               (@as(u8, @intFromBool(self.readable_or_writable)) << 1) |
-               (@as(u8, @intFromBool(self.direction_or_conforming)) << 2) |
-               (@as(u8, @intFromBool(self.executable)) << 3) |
-               (@as(u8, @intFromBool(self.descriptor_type)) << 4) |
-               (@as(u8, @intFromEnum(self.dpl)) << 5) |
-               (@as(u8, @intFromBool(self.present)) << 7);
+            (@as(u8, @intFromBool(self.readable_or_writable)) << 1) |
+            (@as(u8, @intFromBool(self.direction_or_conforming)) << 2) |
+            (@as(u8, @intFromBool(self.executable)) << 3) |
+            (@as(u8, @intFromBool(self.descriptor_type)) << 4) |
+            (@as(u8, @intFromEnum(self.dpl)) << 5) |
+            (@as(u8, @intFromBool(self.present)) << 7);
     }
 
     pub fn code(dpl: PrivilegeLevel) GdtAccess {

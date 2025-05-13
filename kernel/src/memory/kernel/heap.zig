@@ -8,6 +8,8 @@ const utils = @import("../../utils.zig");
 const globals = @import("../../globals.zig");
 const VirtualAddress = paging.VirtualAddress;
 
+const cpu = @import("../../cpu.zig");
+
 const Allocator = std.mem.Allocator;
 
 pub fn init() void {
@@ -18,20 +20,22 @@ pub fn init() void {
         @panic("failed to init paging {}");
     };
 
-
     vmm.init() catch @panic("failed to init vmm");
 }
 
-pub fn allocatePagesWithFlags(num_pages: usize, flags: paging.MmapFlags ) !u64 {
+pub fn allocatePages(num_pages: usize) !u64 {
     const alloc_start = try vmm.allocatePageBlock(num_pages);
 
     for (0..num_pages) |i| {
+        const vaddr = alloc_start + i * utils.PAGE_SIZE;
         const phys_page = try pmm.allocatePage();
         try paging.mapPage(
-            @bitCast(alloc_start + i * utils.PAGE_SIZE),
+            @bitCast(vaddr),
             phys_page,
-            flags,
+            .{ .present = true, .user_supervisor = .supervisor, .read_write = .read_write },
         );
+
+        cpu.invlpg(vaddr);
     }
 
     return alloc_start;
@@ -44,32 +48,37 @@ pub fn freePages(start_addr: usize, num_pages: usize) !void {
 
         try paging.unmapPage(@bitCast(start_addr + page_index * utils.PAGE_SIZE));
         try pmm.freePage(phys_addr);
+
+        cpu.invlpg(page_vaddr);
     }
 
     try vmm.freePageBlock(start_addr, num_pages);
 }
 
+pub const vtable = Allocator.VTable{
+    .alloc = alloc,
+    .free = free,
+    .resize = resize,
+};
+
 pub const page_allocator: Allocator = Allocator{
     .ptr = undefined,
-    .vtable = &Allocator.VTable{
-        .alloc = alloc,
-        .free = free,
-        .resize = resize,
-    },
+    .vtable = &vtable,
 };
 
 fn alloc(_: *anyopaque, len: usize, _: u8, _: usize) ?[*]u8 {
     const num_pages = std.math.divCeil(usize, len, utils.PAGE_SIZE) catch unreachable;
 
-    const start_addr = allocatePagesWithFlags(num_pages, .{ .present = true, .read_write = .read_write }) catch |err| {
-        log.err("failed to allocate pages in kernel: {}", .{err});
-        return null;
+    const start_addr = allocatePages(num_pages) catch |err| {
+        std.log.err("failed to allocate pages in kernel: {}", .{err});
+        unreachable;
     };
 
     return @ptrFromInt(start_addr);
 }
 
 fn free(_: *anyopaque, buf: []u8, _: u8, _: usize) void {
+    std.log.info("freeing pages", .{});
     const start_addr = @intFromPtr(buf.ptr);
     const num_pages = std.math.divCeil(usize, buf.len, utils.PAGE_SIZE) catch unreachable;
     freePages(start_addr, num_pages) catch |err| {

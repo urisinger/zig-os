@@ -24,25 +24,24 @@ pub fn init() !void {
     const bitmap_bytes = bitmap_size * 4;
     const bitmap_num_pages = try std.math.divCeil(u64, bitmap_bytes, utils.PAGE_SIZE);
 
-    for (0..bitmap_num_pages) |i| {
-        const vaddr = i * utils.PAGE_SIZE + heap_start;
+    const alloc_start = heap_start;
+    for (0..bitmap_num_pages) |_| {
         const paddr = try pmm.allocatePage();
-        try paging.mapPage(@bitCast(vaddr), paddr, MmapFlags{
+
+        try paging.mapPage(@bitCast(heap_start), paddr, MmapFlags{
             .present = true,
             .read_write = .read_write,
         });
+
+        heap_start += utils.PAGE_SIZE;
     }
 
     allocator = BitmapAllocator{
-        .bitmap_ptr = @ptrFromInt(heap_start),
+        .bitmap_ptr = @ptrFromInt(alloc_start),
         .num_pages = num_pages,
     };
 
     @memset(allocator.?.bitmap_ptr[0..bitmap_size], ~@as(u32, 0));
-
-    for (0..bitmap_num_pages) |i| {
-        try allocator.?.unfreePage(i);
-    }
 
     log.info("initialized vmm", .{});
 }
@@ -72,7 +71,10 @@ pub fn allocatePageBlock(num_pages: usize) !u64 {
         log.err("Allocator is not initialized", .{});
         return Error.AllocatorNotInitialized;
     }
-    return try allocator.?.allocatePageBlock(num_pages) + heap_start;
+
+    const addr = try allocator.?.allocatePageBlock(num_pages) + heap_start;
+
+    return addr;
 }
 
 pub fn freePageBlock(page: u64, num_pages: usize) !void {

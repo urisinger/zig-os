@@ -21,7 +21,6 @@ pub fn logFn(comptime level: log.Level, comptime scope: @TypeOf(.enum_literal), 
         .debug => "\x1b[36m", // Cyan for debug
     };
 
-
     const reset_color = "\x1b[0m";
 
     const scope_prefix = switch (scope) {
@@ -30,10 +29,8 @@ pub fn logFn(comptime level: log.Level, comptime scope: @TypeOf(.enum_literal), 
     };
     const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
 
-    // Apply the color to the prefix
     const colored_prefix = color ++ prefix ++ reset_color;
 
-    // Print the formatted message with the colored prefix
     serial.writer().print(colored_prefix ++ format ++ "\n", args) catch return;
     console.writer().print(colored_prefix ++ format ++ "\n", args) catch {};
 }

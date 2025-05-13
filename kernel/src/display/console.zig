@@ -10,7 +10,7 @@ const font_y = 16;
 
 const char_bytes = font_x * font_y / 8;
 
-const ConsoleError = error{ ConsoleNotInitialized };
+const ConsoleError = error{ConsoleNotInitialized};
 
 pub fn writer() std.io.Writer(void, ConsoleError, write) {
     return .{ .context = {} };
@@ -46,7 +46,6 @@ pub fn init() void {
     };
 }
 
-
 pub const Console = struct {
     real: *framebuffer.Framebuffer,
     virt: framebuffer.Framebuffer,
@@ -69,7 +68,7 @@ pub fn flush() ConsoleError!void {
     const width = @min(src.width, dst.width);
     const height = @min(src.height, dst.height);
 
-    const src_pixels: [*]const Color= @ptrCast(@alignCast(src.address));
+    const src_pixels: [*]const Color = @ptrCast(@alignCast(src.address));
 
     dst.blit(0, 0, src_pixels, width, height);
 }
@@ -111,8 +110,6 @@ fn putc(c: u8) ConsoleError!void {
     }
 }
 
-
-
 pub fn puts(s: []const u8) ConsoleError!void {
     const con = &(console orelse return ConsoleError.ConsoleNotInitialized);
 
@@ -129,11 +126,11 @@ pub fn puts(s: []const u8) ConsoleError!void {
             }
             if (color_code) |code| {
                 switch (code) {
-                    0, 1 => con.cur_color = Color.WHITE,
-                    2, 31, 36 => con.cur_color = Color.RED,
-                    3, 32 => con.cur_color = Color.GREEN,
-                    4 => con.cur_color = Color.BLUE,
+                    0 => con.cur_color = Color.WHITE,
+                    31 => con.cur_color = Color.RED,
+                    32 => con.cur_color = Color.GREEN,
                     33 => con.cur_color = Color.YELLOW,
+                    36 => con.cur_color = Color.CYAN,
                     else => {},
                 }
             }
@@ -151,7 +148,6 @@ pub fn puts(s: []const u8) ConsoleError!void {
     }
 }
 
-
 pub fn scrollAndFlush() ConsoleError!void {
     const con = &(console orelse return ConsoleError.ConsoleNotInitialized);
     const virt = con.virt;
@@ -162,7 +158,7 @@ pub fn scrollAndFlush() ConsoleError!void {
 
     const virt_pixels: [*]Color = @alignCast(@ptrCast(virt.address));
     const real_pixels: [*]Color = @alignCast(@ptrCast(real.address));
-    
+
     const rows_to_scroll = font_y;
 
     // Scroll: move rows up in the virtual buffer
@@ -191,4 +187,3 @@ pub fn scrollAndFlush() ConsoleError!void {
         @memcpy(dst_row[0..pitch_pixels], src_row[0..pitch_pixels]);
     }
 }
-

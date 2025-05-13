@@ -66,7 +66,6 @@ pub fn init() !void {
         }
     }
 
-
     const num_pages: usize = std.mem.alignForward(u64, max_addr, utils.PAGE_SIZE) / utils.PAGE_SIZE;
     const bitmap_size = (num_pages + 31) / 32;
     const bitmap_bytes = bitmap_size * 4;

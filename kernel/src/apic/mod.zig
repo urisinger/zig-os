@@ -65,13 +65,13 @@ pub fn enableLocalApic() !void {
     cpu.writeMsr(IA32_APIC_BASE, base);
     const apic_page_addr = try vmm.allocatePage();
 
-    try paging.mapPage(@bitCast(apic_page_addr), (base & APIC_BASE_MASK) | APIC_BASE_TOP, .{.present = true, .read_write = .read_write, .cache_disable = true});
+    try paging.mapPage(@bitCast(apic_page_addr), (base & APIC_BASE_MASK) | APIC_BASE_TOP, .{ .present = true, .read_write = .read_write, .cache_disable = true });
 
     apicBase = @ptrFromInt(apic_page_addr);
 
     const ioapic_page_addr = try vmm.allocatePage();
 
-    try paging.mapPage(@bitCast(ioapic_page_addr), IOAPIC_DEFAULT_ADDR, .{.present = true, .read_write = .read_write, .cache_disable =  true});
+    try paging.mapPage(@bitCast(ioapic_page_addr), IOAPIC_DEFAULT_ADDR, .{ .present = true, .read_write = .read_write, .cache_disable = true });
 
     ioApicBase = @ptrFromInt(ioapic_page_addr);
 }
@@ -91,10 +91,10 @@ pub inline fn writeIoRegister(reg: u32, value: u32) void {
 
 pub inline fn readIoRegister(reg: u32) u32 {
     ioApicBase.?[0] = reg;
-    return ioApicBase.?[4]; 
+    return ioApicBase.?[4];
 }
 
-pub inline fn sendEoi() void{
+pub inline fn sendEoi() void {
     writeRegister(0xB, 0);
 }
 
@@ -104,7 +104,6 @@ pub inline fn writeRedirEntry(entry_num: u8, entry: RedirectionEntry) void {
 
     writeIoRegister(0x10 + @as(u32, @intCast(entry_num)) * 2, @intCast(entry_u64));
 }
-
 
 pub fn configureLocalApic() !void {
     // Enable the Local APIC by setting the appropriate MSR bit
@@ -127,18 +126,17 @@ pub fn configureLocalApic() !void {
     redir_entry_count = (readIoRegister(IOAPICVER) >> 16) + 1;
 
     // Log the detected APIC ID, version, and redirection entry count
-    std.log.info("apic_ID: 0x{x}, apic_ver: 0x{x}", .{ apic_id, apic_ver});
+    std.log.info("apic_ID: 0x{x}, apic_ver: 0x{x}", .{ apic_id, apic_ver });
 
     // Configure a redirection entry for IRQ 1 (typically keyboard) to vector 0x20 (interrupt handler)
     writeRedirEntry(0x1, RedirectionEntry{
-        .vector = 0x20,                  // Interrupt vector number
-        .delivery_mode = .Fixed,        // Fixed delivery mode (normal interrupt)
-        .destination_mode = .Physical,  // Physical destination mode
-        .pin_polarity = 0,              // Active high
-        .remote_IRR = 0,                // Initially 0 (not pending)
-        .trigger_mode = 1,              // Level-triggered
-        .mask = 0,                      // Unmasked (enabled)
-        .destination = apic_id,         // Destination APIC ID (this processor)
+        .vector = 0x20, // Interrupt vector number
+        .delivery_mode = .Fixed, // Fixed delivery mode (normal interrupt)
+        .destination_mode = .Physical, // Physical destination mode
+        .pin_polarity = 0, // Active high
+        .remote_IRR = 0, // Initially 0 (not pending)
+        .trigger_mode = 1, // Level-triggered
+        .mask = 0, // Unmasked (enabled)
+        .destination = apic_id, // Destination APIC ID (this processor)
     });
-
 }

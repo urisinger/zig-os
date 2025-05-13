@@ -4,7 +4,7 @@ const paging = @import("../page_table.zig");
 const utils = @import("../../utils.zig");
 const globals = @import("../../globals.zig");
 
-const std= @import("std");
+const std = @import("std");
 
 const Error = error{
     OutOfBounds,
@@ -28,7 +28,7 @@ pub fn allocateUserExecutablePageWithCode(
         const start = i * utils.PAGE_SIZE;
         const end = @min(code.len, start + utils.PAGE_SIZE);
         const len = end - start;
-        
+
         @memcpy(virt_ptr[0..len], code[start..end]);
 
         try page_table.mapPage(
@@ -40,17 +40,15 @@ pub fn allocateUserExecutablePageWithCode(
                 .user_supervisor = .user,
             },
         );
-
     }
 
     return virt_base;
 }
 
-
 pub fn allocateUserPages(
-    vm: *vmm.VmAllocator,      // Virtual memory allocator for user space
-    page_table: *paging.PageMapping,   // User-level page table
-    num_pages: usize            // How many pages to allocate
+    vm: *vmm.VmAllocator, // Virtual memory allocator for user space
+    page_table: *paging.PageMapping, // User-level page table
+    num_pages: usize, // How many pages to allocate
 ) !usize {
     const size_bytes = num_pages * utils.PAGE_SIZE;
 

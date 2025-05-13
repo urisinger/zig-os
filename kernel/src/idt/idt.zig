@@ -7,9 +7,9 @@ const exceptions = @import("interrupts/exceptions.zig");
 const cpu = @import("../cpu.zig");
 
 const irq = @import("interrupts/irq.zig");
+const threads = @import("../threads/mod.zig");
 
 pub fn init() void {
-
     registerExeptions();
     const idtr = Lidr{
         .size = @intCast((idt.len * @sizeOf(IdtEntry))),
@@ -42,8 +42,6 @@ fn registerExeptions() void {
     registerInterrupt(0x1E, exceptions.securityException, .int, .user);
 
     registerInterrupt(0x20, irq.irq1, .int, .user);
-
-    registerInterrupt(0x80, irq.syscall, .int, .user);
 }
 
 const Lidr = packed struct {
@@ -78,17 +76,15 @@ pub const IdtEntry = packed struct(u128) {
 
     pub fn new(address: u64, gate_type: GateType, ring: Ring) IdtEntry {
         return IdtEntry{
-            .offset_1 = @intCast(address & 0xffff),
-            .offset_2 = @intCast((address >> 16) & 0xffffffffffff), // Mask to 48 bits
-            .selector = 0x8, // This is correct for your GDT setup
+            .offset_1 = @truncate(address),
+            .offset_2 = @truncate((address >> 16)), // Mask to 48 bits
+            .selector = 0x8, 
             .gate_type = gate_type,
             .ring = ring,
             .present = true,
         };
     }
 };
-
-pub export var context: *volatile Context = undefined;
 
 const idt_size = 256;
 
@@ -100,7 +96,8 @@ var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
     break :init initial_value;
 };
 
-export fn interruptDispatch() void {
+export fn interruptDispatch(context: *Context) callconv(.SysV) void {
+    threads.saveContext(context);
     if (handlers[context.interrupt_num]) |handler| {
         handler(context);
     } else {
@@ -108,7 +105,6 @@ export fn interruptDispatch() void {
         @panic("Unhandled exeption");
     }
 }
-
 
 pub const Registers = packed struct {
     r15: u64 = 15,
@@ -168,54 +164,43 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
             ;
 
         const push_registers = std.fmt.comptimePrint(
+            \\
+            ++ 
+            cpu.swapgs_if_necessary()
+            ++
             \\     push ${}     // First push the int number
-            \\     push %rax    // then push general purpose registers
-            \\     push %rbx
-            \\     push %rcx
-            \\     push %rdx
-            \\     push %rbp
-            \\     push %rsi
-            \\     push %rdi
-            \\     push %r8
-            \\     push %r9
-            \\     push %r10
-            \\     push %r11
-            \\     push %r12
-            \\     push %r13
-            \\     push %r14
-            \\     push %r15
-            \\     mov %rsp, context
+            ++
+            cpu.push_gpr()
+            ++
+            \\ xchg %bx, %bx
+            \\ mov $0x10, %ax 
+            \\ mov %ax, %ds
+            \\ mov %ax, %es
+            \\ mov %rsp, %rdi   
         , .{num});
 
         const save_status = push_error ++ push_registers;
 
         const restore_status =
-            \\     mov context, %rsp
-            \\     pop %r15
-            \\     pop %r14
-            \\     pop %r13
-            \\     pop %r12
-            \\     pop %r11
-            \\     pop %r10
-            \\     pop %r9
-            \\     pop %r8
-            \\     pop %rdi
-            \\     pop %rsi
-            \\     pop %rbp
-            \\     pop %rdx
-            \\     pop %rcx
-            \\     pop %rbx
-            \\     pop %rax
-            \\     add $16, %rsp
-            \\     iretq
+            \\ call schedulerTick
+            \\ mov %rax, %rsp
+            \\ mov $0x23, %ax 
+            \\ mov %ax, %ds
+            \\ mov %ax, %es
+            ++ 
+            cpu.pop_gpr()
+            ++
+            \\ add $16, %rsp
+            ++ 
+            cpu.swapgs_if_necessary()
+            ++
+            \\ iretq
         ;
 
         break :scope struct {
             fn handle() callconv(.Naked) void {
                 asm volatile (save_status ::: "memory");
-                asm volatile ("call saveContext");
                 asm volatile ("call interruptDispatch");
-                asm volatile ("call contextSwitch"); // Found in threads/mod.zig
                 asm volatile (restore_status ::: "memory");
             }
         }.handle;

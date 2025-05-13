@@ -2,7 +2,6 @@ const std = @import("std");
 const ps2 = @import("../ps2.zig");
 const KeyCode = @import("mod.zig").KeyCode;
 
-
 pub const Error = error{
     CommandTimeout,
     InvalidPort,
@@ -16,7 +15,7 @@ var driver_state = DriverState{};
 
 pub fn init() !void {
     _ = ps2.readData() catch 0;
-   // Set Scancode Set 1
+    // Set Scancode Set 1
     try ps2.writeDataToPort(1, 0xF0); // Command: Set scancode
     const data = try ps2.readData();
     if (data != 0xFA) return error.DeviceNotAcknowledging;
@@ -32,7 +31,6 @@ pub const DriverState = struct {
     shift: bool = false,
     ctrl: bool = false,
     alt: bool = false,
-
 
     pub fn handleScancode(self: *DriverState, scancode: u8) ?KeyCode {
         const released = (scancode & 0x80) != 0;
