@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.irq);
 const idt = @import("../idt.zig");
 const apic = @import("../../apic/mod.zig");
 
@@ -11,11 +12,10 @@ var keyboard_state = keyboard.DriverState{};
 pub fn irq1(_: *volatile idt.Context) void {
     const scancode = ps2.readData() catch {
         apic.sendEoi();
-        std.log.info("hh", .{});
         return;
     };
     if (keyboard_state.handleScancode(scancode)) |key| {
-        std.log.info("Key event: {}", .{key});
+        log.info("Key event: {}", .{key});
     }
     apic.sendEoi();
 }

@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.allocator);
 
 const globals = @import("../globals.zig");
 const utils = @import("../utils.zig");
@@ -32,7 +32,7 @@ pub const BitmapAllocator = struct {
             return page_ptr;
         }
 
-        std.log.err("Failed to allocate page: No free pages available", .{});
+        log.err("Failed to allocate page: No free pages available", .{});
         return Error.NoFreePages;
     }
 

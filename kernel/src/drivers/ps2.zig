@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.ps2);
 
 const cpu = @import("../cpu.zig");
 const outb = cpu.outb;

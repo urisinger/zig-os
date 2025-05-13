@@ -7,8 +7,8 @@ pub var table = [_]GdtEntry{
     GdtEntry.init(0, 0, GdtAccess.code(.Ring0), GdtFlags{ .long_mode = true, .granularity_4k = true }),
     GdtEntry.init(0, 0, GdtAccess.data(.Ring0), GdtFlags{ .long_mode = true, .granularity_4k = true }),
 
-    GdtEntry.init(0, 0, GdtAccess.code(.Ring3), GdtFlags{ .long_mode = true, .granularity_4k = true }),
     GdtEntry.init(0, 0, GdtAccess.data(.Ring3), GdtFlags{ .long_mode = true, .granularity_4k = true }),
+    GdtEntry.init(0, 0, GdtAccess.code(.Ring3), GdtFlags{ .long_mode = true, .granularity_4k = true }),
 
     // Tss
     GdtEntry.empty(),

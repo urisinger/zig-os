@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const log = std.log;
 const font = @embedFile("DEF_8X16.F16");
 const framebuffer = @import("framebuffer.zig");
 const Color = framebuffer.Color;

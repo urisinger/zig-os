@@ -10,7 +10,7 @@ const boot = @import("../../boot.zig");
 const cpu = @import("../../cpu.zig");
 
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.kpaging);
 
 pub const Error = error{
     PageAlreadyMapped,
@@ -97,8 +97,6 @@ pub fn init() Error!void {
     cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
     base_kernel_pml4 = pml4;
-
-    std.log.info("{x}", .{getPaddr(@bitCast(@intFromPtr(base_kernel_pml4))) catch unreachable});
 
     log.info("initialized paging", .{});
 }

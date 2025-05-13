@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.main);
 
 const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false });
 
@@ -34,8 +34,9 @@ const paging = @import("memory/kernel/paging.zig");
 const uheap = @import("memory/user/heap.zig");
 const core = @import("core.zig");
 
-const elf_code align(@alignOf(std.elf.Elf64_Ehdr))= @embedFile("user_elf").*;
+const elf_code align(@alignOf(std.elf.Elf64_Ehdr)) = @embedFile("user_elf").*;
 const elf = @import("exec/efi.zig");
+const syscall = @import("idt/syscall.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
@@ -43,23 +44,26 @@ pub const std_options: std.Options = .{
 };
 
 const entry_code = [_]u8{
-    0xf3, 0x90, // pause
-    0xeb, 0xfd, // jmp $-3
+    0x0F, 0x05, // pause
+    0xeb, 0xfc, // jmp $-3
 };
 
 
 export fn _start() callconv(.C) noreturn {
     cpu.cli();
 
+    framebuffer.init();
     logger.init();
+
     boot.init();
 
     gdt.init();
     core.init();
 
-    kheap.init();
+    idt.init();
 
-    framebuffer.init();
+
+    kheap.init();
     console.init();
 
     apic.configureLocalApic() catch @panic("failed to init apic");
@@ -67,13 +71,14 @@ export fn _start() callconv(.C) noreturn {
     ps2.init() catch @panic("failed to initilize ps2");
 
     ps2_keyboard.init() catch |err| {
-        std.log.err("Failed to initialize PS/2 keyboard: {}", .{err});
+        log.err("Failed to initialize PS/2 keyboard: {}", .{err});
         @panic("PS/2 keyboard init failed");
     };
 
-    idt.init();
+    syscall.init();
 
     const allocator = core.context().gpa.allocator();
+
 
     var user_vmm = uvmm.VmAllocator.init(allocator, utils.MB(1), 0x00007FFFFFFFFFFF);
 

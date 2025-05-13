@@ -7,13 +7,14 @@ const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false });
 
 const CoreContext = struct {
     self: *CoreContext,
+    kernel_stack: u64,
     current_task: *scheduler.Task,
     scheduler: scheduler.Scheduler,
     gpa: Gpa,
 };
 
-pub fn context() *CoreContext {
-    return @ptrFromInt(asm volatile ("mov %%gs:0, %[ret]"
+pub inline fn context()  *CoreContext{
+    return @ptrFromInt(asm volatile ("mov %gs:0, %[ret]"
         : [ret] "=r" (-> u64),
     ));
 }

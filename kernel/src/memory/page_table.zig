@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.page_table);
 
 const utils = @import("../utils.zig");
 
@@ -121,7 +121,7 @@ pub const PageMapping = extern struct {
             const current_vaddr: VirtualAddress = @bitCast(@as(u64, @bitCast(vaddr)) + @as(u64, page_index) * utils.LARGE_PAGE_SIZE);
 
             if (@as(u64, @bitCast(current_vaddr)) == 0xffffffff8005a000) {
-                std.log.err("why is this addr in mmap", .{});
+                log.err("why is this addr in mmap", .{});
             }
             const current_paddr = @as(u64, @bitCast(paddr)) + @as(u64, page_index) * utils.LARGE_PAGE_SIZE;
 
@@ -142,7 +142,7 @@ pub const PageMapping = extern struct {
         const entry = &pt.mappings[vaddr.pt_idx];
 
         if (entry.present) {
-            std.log.err("entry already present: 0x{x} with flags: ", .{@as(u64, @bitCast(vaddr))});
+            log.err("entry already present: 0x{x} with flags: ", .{@as(u64, @bitCast(vaddr))});
         }
 
         entry.* = @bitCast(paddr);

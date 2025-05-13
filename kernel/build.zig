@@ -100,6 +100,6 @@ pub fn build(b: *std.Build) !void {
     // just set it to a random file
     kernel_check.root_module.addImport("user_elf", user_check_module);
 
-    const check = b.step("check", "Check if foo compiles");
+    const check = b.step("check", "Check if kernel compiles");
     check.dependOn(&kernel_check.step);
 }

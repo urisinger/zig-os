@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.idt);
 const utils = @import("../utils.zig");
 const gdt = @import("../gdt.zig");
 
@@ -101,7 +102,7 @@ export fn interruptDispatch(context: *Context) callconv(.SysV) *Context {
     if (handlers[context.interrupt_num]) |handler| {
         handler(context);
     } else {
-        std.log.err("Unhandled expetion 0x{X} err=0b{b}", .{ context.interrupt_num, @as(u32, @intCast(context.error_code)) });
+        log.err("Unhandled expetion 0x{X} err=0b{b}", .{ context.interrupt_num, @as(u32, @intCast(context.error_code)) });
         @panic("Unhandled exeption");
     }
     return scheduler.schedulerTick();
@@ -172,13 +173,20 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
                 cpu.push_gpr();
 
                 asm volatile (
-                    \\ mov %rsp, %rdi
-                    \\ call interruptDispatch
-                    \\ mov %rax, %rsp
+                   \\ mov $0x10, %ax 
+                   \\ mov %ax, %ds
+                   \\ mov %ax, %es
+
+                   \\ mov %rsp, %rdi
+                   \\ call interruptDispatch
+                   \\ mov %rax, %rsp
+
+                   \\ mov $0x1B, %ax 
+                   \\ mov %ax, %ds
+                   \\ mov %ax, %es 
                 );
 
-                cpu.pop_gpr();
-
+                cpu.pop_gpr(); 
                 asm volatile ("add $16, %rsp");
 
                 cpu.swapgs_if_necessary();

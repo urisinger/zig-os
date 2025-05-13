@@ -90,8 +90,8 @@ pub inline fn readMsr(msr: u64) u64 {
     return (high << 32) | low;
 }
 
-pub inline fn swapgs_if_necessary() void {
-    asm volatile (
+pub inline fn swapgs_if_necessary() void{
+       asm volatile(
         \\ cmpw $0x08, 0x8(%rsp)
         \\ je 1f 
         \\ swapgs
@@ -99,8 +99,8 @@ pub inline fn swapgs_if_necessary() void {
     );
 }
 
-pub inline fn push_gpr() void {
-    asm volatile (
+pub inline fn push_gpr()  void{
+       asm volatile(
         \\     push %rax
         \\     push %rbx
         \\     push %rcx

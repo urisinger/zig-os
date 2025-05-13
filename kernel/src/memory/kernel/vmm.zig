@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.kvmm);
 
 const utils = @import("../../utils.zig");
 const globals = @import("../../globals.zig");

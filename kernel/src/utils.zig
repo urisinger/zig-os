@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.utils);
 const builtin = @import("builtin");
 const cpu = @import("cpu.zig");
 

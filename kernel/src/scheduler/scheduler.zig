@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.scheduler);
 
 const cpu = @import("../cpu.zig");
 const tss = @import("../tss.zig");
@@ -50,21 +51,22 @@ fn nextTask() *idt.Context {
     const next_task = current_task.next;
 
     if (next_task.name) |name| {
-        std.log.info("switching to task: {s}", .{name});
+        log.info("switching to task: {s}", .{name});
     }
 
     tss.set_rsp(next_task.task.kernel_stack);
 
     cpu.setCr3(@intFromPtr(next_task.task.pml4) - globals.hhdm_offset);
 
-    scheduler.task_qeueue = next_task;
-
+    context.kernel_stack = next_task.task.kernel_stack;
     context.current_task = next_task.task;
+    scheduler.task_qeueue = next_task;
     return next_task.task.context;
 }
 
 fn insertTask(new_task: *TaskQueueEntry) void {
-    const scheduler = &core.context().scheduler;
+    const context = core.context();
+    const scheduler = &context.scheduler;
     const current_task = scheduler.task_qeueue;
 
     if (current_task) |task| {
@@ -73,6 +75,8 @@ fn insertTask(new_task: *TaskQueueEntry) void {
     } else {
         new_task.next = new_task;
         scheduler.task_qeueue = new_task;
+        context.current_task = new_task.task;
+        context.kernel_stack = new_task.task.kernel_stack;
     }
 }
 
@@ -105,10 +109,10 @@ pub fn createAndPopulateTask(
         .error_code = 0,
         .ret_frame = .{
             .rip = entry_point,
-            .cs = 0x18 | 0x3,
+            .cs = 0x20 | 0x3,
             .rsp = user_stack_top,
             .rflags = 0x202,
-            .ss = 0x20 | 0x3,
+            .ss = 0x18 | 0x3,
         },
     };
 
@@ -130,7 +134,7 @@ pub fn createAndPopulateTask(
     insertTask(task_entry);
 }
 
-pub export fn enterUserMode() noreturn {
+pub export fn start() noreturn {
     const scheduler = core.context().scheduler;
     const current_task = scheduler.task_qeueue.?;
     const task = current_task.task;
@@ -145,7 +149,7 @@ pub export fn enterUserMode() noreturn {
     const frame = &context.ret_frame;
     asm volatile (
         \\ swapgs
-        \\ mov $0x23, %ax
+        \\ mov $0x1B, %ax
         \\ mov %ax, %ds
         \\ mov %ax, %es
         \\ pushq %[ss]

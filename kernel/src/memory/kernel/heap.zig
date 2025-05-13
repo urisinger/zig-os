@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log;
+const log = std.log.scoped(.kheap);
 const paging = @import("paging.zig");
 const pmm = @import("../pmm.zig");
 const vmm = @import("vmm.zig");
@@ -70,7 +70,7 @@ fn alloc(_: *anyopaque, len: usize, _: u8, _: usize) ?[*]u8 {
     const num_pages = std.math.divCeil(usize, len, utils.PAGE_SIZE) catch unreachable;
 
     const start_addr = allocatePages(num_pages) catch |err| {
-        std.log.err("failed to allocate pages in kernel: {}", .{err});
+        log.err("failed to allocate pages in kernel: {}", .{err});
         unreachable;
     };
 
@@ -78,7 +78,6 @@ fn alloc(_: *anyopaque, len: usize, _: u8, _: usize) ?[*]u8 {
 }
 
 fn free(_: *anyopaque, buf: []u8, _: u8, _: usize) void {
-    std.log.info("freeing pages", .{});
     const start_addr = @intFromPtr(buf.ptr);
     const num_pages = std.math.divCeil(usize, buf.len, utils.PAGE_SIZE) catch unreachable;
     freePages(start_addr, num_pages) catch |err| {

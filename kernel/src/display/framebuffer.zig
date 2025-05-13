@@ -38,8 +38,6 @@ pub const Color = packed struct(u32) {
     pub const WHITE = Color{ .r = 255, .g = 255, .b = 255 };
 };
 
-const serial = @import("../serial.zig");
-
 pub const Framebuffer = struct {
     address: [*]u8,
     width: u64, // screen width in pixels
