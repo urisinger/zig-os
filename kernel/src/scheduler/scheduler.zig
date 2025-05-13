@@ -41,12 +41,13 @@ pub fn saveContext(constext: *idt.Context) void{
     cur_task.task.context = constext;
 }
 
-export fn schedulerTick() callconv(.SysV) *idt.Context {
-    return nextThead();
+pub fn schedulerTick() callconv(.SysV) *idt.Context {
+    return nextTask();
 }
 
-pub fn nextThead() *idt.Context{
-    const scheduler = &core.context().scheduler;
+fn nextTask() *idt.Context{
+    const context = core.context();
+    const scheduler = &context.scheduler;
     const current_task = scheduler.task_qeueue.?;
 
     const next_task = current_task.next;
@@ -60,10 +61,12 @@ pub fn nextThead() *idt.Context{
     cpu.setCr3(@intFromPtr(next_task.task.pml4) - globals.hhdm_offset);
 
     scheduler.task_qeueue = next_task;
+
+    context.current_task = next_task.task;
     return next_task.task.context;
 }
 
-pub fn insertTask(new_task: *TaskQueueEntry) void {
+fn insertTask(new_task: *TaskQueueEntry) void {
     const scheduler = &core.context().scheduler;
     const current_task = scheduler.task_qeueue;
 

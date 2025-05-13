@@ -1,12 +1,12 @@
-const threads = @import("threads/mod.zig");
+const scheduler = @import("scheduler/scheduler.zig");
 const cpu = @import("cpu.zig");
 
 const std = @import("std");
 
 const CoreContext = struct{
     self: *CoreContext,
-    current_task: *threads.Task,
-    scheduler: threads.Scheduler
+    current_task: *scheduler.Task,
+    scheduler: scheduler.Scheduler
 };
 
 pub fn context() *CoreContext{

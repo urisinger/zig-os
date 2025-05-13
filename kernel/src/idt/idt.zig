@@ -7,7 +7,7 @@ const exceptions = @import("interrupts/exceptions.zig");
 const cpu = @import("../cpu.zig");
 
 const irq = @import("interrupts/irq.zig");
-const threads = @import("../threads/mod.zig");
+const scheduler = @import("../scheduler/scheduler.zig");
 
 pub fn init() void {
     registerExeptions();
@@ -96,14 +96,15 @@ var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
     break :init initial_value;
 };
 
-export fn interruptDispatch(context: *Context) callconv(.SysV) void {
-    threads.saveContext(context);
+export fn interruptDispatch(context: *Context) callconv(.SysV) *Context {
+    scheduler.saveContext(context);
     if (handlers[context.interrupt_num]) |handler| {
         handler(context);
     } else {
         std.log.err("Unhandled expetion 0x{X} err=0b{b}", .{ context.interrupt_num, @as(u32, @intCast(context.error_code)) });
         @panic("Unhandled exeption");
     }
+    return scheduler.schedulerTick();
 }
 
 pub const Registers = packed struct {
@@ -159,49 +160,32 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
         } else false)
             ""
         else
-            \\     push $0b10000000000000000
-            \\
-            ;
+            "push $0b10000000000000000\n";
 
-        const push_registers = std.fmt.comptimePrint(
-            \\
-            ++ 
-            cpu.swapgs_if_necessary()
-            ++
-            \\     push ${}     // First push the int number
-            ++
-            cpu.push_gpr()
-            ++
-            \\ xchg %bx, %bx
-            \\ mov $0x10, %ax 
-            \\ mov %ax, %ds
-            \\ mov %ax, %es
-            \\ mov %rsp, %rdi   
+        const push_num = std.fmt.comptimePrint(
+            "push ${} \n"
         , .{num});
-
-        const save_status = push_error ++ push_registers;
-
-        const restore_status =
-            \\ call schedulerTick
-            \\ mov %rax, %rsp
-            \\ mov $0x23, %ax 
-            \\ mov %ax, %ds
-            \\ mov %ax, %es
-            ++ 
-            cpu.pop_gpr()
-            ++
-            \\ add $16, %rsp
-            ++ 
-            cpu.swapgs_if_necessary()
-            ++
-            \\ iretq
-        ;
 
         break :scope struct {
             fn handle() callconv(.Naked) void {
-                asm volatile (save_status ::: "memory");
-                asm volatile ("call interruptDispatch");
-                asm volatile (restore_status ::: "memory");
+                cpu.swapgs_if_necessary();
+
+                asm volatile (push_error ++ push_num);
+                cpu.push_gpr();
+
+                asm volatile (
+                   \\ mov %rsp, %rdi
+                   \\ call interruptDispatch
+                   \\ mov %rax, %rsp
+                );
+
+                cpu.pop_gpr();
+
+                asm volatile ("add $16, %rsp" :::);
+
+                cpu.swapgs_if_necessary();
+
+                asm volatile ("iretq" :::);
             }
         }.handle;
     };

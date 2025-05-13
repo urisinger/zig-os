@@ -28,7 +28,7 @@ const ps2_keyboard = @import("drivers/keyboard/ps2.zig");
 
 const gdt = @import("gdt.zig");
 
-const threads = @import("threads/mod.zig");
+const scheduler = @import("scheduler/scheduler.zig");
 
 const paging = @import("memory/kernel/paging.zig");
 const uheap = @import("memory/user/heap.zig");
@@ -72,8 +72,8 @@ export fn _start() callconv(.C) noreturn {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
     const allocator = gpa.allocator();
 
-    threads.createAndPopulateTask(allocator, &entry_code, "task_1");
+    scheduler.createAndPopulateTask(allocator, &entry_code, "task_1");
 
-    threads.createAndPopulateTask(allocator, &entry_code, "task_2");
-    threads.enterUserMode();
+    scheduler.createAndPopulateTask(allocator, &entry_code, "task_2");
+    scheduler.enterUserMode();
 }
