@@ -58,7 +58,6 @@ export fn _start() callconv(.C) noreturn {
     framebuffer.init();
     console.init();
 
-    idt.init();
 
     apic.configureLocalApic() catch @panic("failed to init apic");
 
@@ -68,6 +67,8 @@ export fn _start() callconv(.C) noreturn {
         std.log.err("Failed to initialize PS/2 keyboard: {}", .{err});
         @panic("PS/2 keyboard init failed");
     };
+
+    idt.init();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
     const allocator = gpa.allocator();

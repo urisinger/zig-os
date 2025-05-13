@@ -6,4 +6,4 @@
 /ovmf-*
 /*.iso
 /*.hdd
-
+/stdout.txt
