@@ -142,7 +142,7 @@ pub const PageMapping = extern struct {
         const entry = &pt.mappings[vaddr.pt_idx];
 
         if (entry.present) {
-            std.log.err("entry already present: 0x{x} with flags: ", .{@as(u64, @bitCast(vaddr))});
+            log.err("entry already present: 0x{x} with flags: ", .{@as(u64, @bitCast(vaddr))});
         }
 
         entry.* = @bitCast(paddr);

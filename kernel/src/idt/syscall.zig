@@ -1,16 +1,19 @@
 const std = @import("std");
+const log = std.log.scoped(.syscall);
+
 const cpu = @import("../cpu.zig");
+
 pub export fn syscall_dispatch() callconv(.SysV) void {
-    std.log.info("hi", .{});
+    log.info("hi", .{});
 }
 
 pub fn syscall_handler() callconv(.Naked) void {
     asm volatile  (
         \\ swapgs
-        \\ mov %gs:8, %rsp
+        \\ mov %gs:8, %rsp // load kernel stack 
+        \\ sti
         \\ push %r11
         \\ push %rcx
-        \\ sti
         \\ call syscall_dispatch
         \\ pop %rcx                 
         \\ pop %r11                

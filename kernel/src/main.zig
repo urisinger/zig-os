@@ -46,20 +46,24 @@ const entry_code = [_]u8{
     0xeb, 0xfc, // jmp $-3
 };
 
+var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
+
 export fn _start() callconv(.C) noreturn {
     cpu.cli();
 
+    framebuffer.init();
     logger.init();
+
     boot.init();
 
     gdt.init();
     core.init();
 
+    idt.init();
+
+
     kheap.init();
-
-    framebuffer.init();
     console.init();
-
 
     apic.configureLocalApic() catch @panic("failed to init apic");
 
@@ -70,14 +74,12 @@ export fn _start() callconv(.C) noreturn {
         @panic("PS/2 keyboard init failed");
     };
 
-    idt.init();
+    syscall.init();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
     const allocator = gpa.allocator();
 
     scheduler.createAndPopulateTask(allocator, &entry_code, "task_1");
 
     scheduler.createAndPopulateTask(allocator, &entry_code, "task_2");
-    syscall.init();
     scheduler.start();
 }

@@ -98,8 +98,6 @@ pub fn init() Error!void {
 
     base_kernel_pml4 = pml4;
 
-    std.log.info("{x}", .{getPaddr(@bitCast(@intFromPtr(base_kernel_pml4))) catch unreachable});
-
     log.info("initialized paging", .{});
 }
 

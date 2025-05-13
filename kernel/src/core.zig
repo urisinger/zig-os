@@ -5,7 +5,7 @@ const std = @import("std");
 
 const CoreContext = struct{
     self: *CoreContext,
-    cur_stack: u64,
+    kernel_stack: u64,
     current_task: *scheduler.Task,
     scheduler: scheduler.Scheduler
 };

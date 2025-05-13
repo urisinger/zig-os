@@ -58,13 +58,12 @@ fn nextTask() *idt.Context{
     }
 
     tss.set_rsp(next_task.task.kernel_stack);
-    context.cur_stack = next_task.task.kernel_stack;
 
     cpu.setCr3(@intFromPtr(next_task.task.pml4) - globals.hhdm_offset);
 
-    scheduler.task_qeueue = next_task;
-
+    context.kernel_stack = next_task.task.kernel_stack;
     context.current_task = next_task.task;
+    scheduler.task_qeueue = next_task;
     return next_task.task.context;
 }
 
@@ -80,7 +79,7 @@ fn insertTask(new_task: *TaskQueueEntry) void {
         new_task.next = new_task;
         scheduler.task_qeueue = new_task;
         context.current_task = new_task.task;
-        context.cur_stack = new_task.task.kernel_stack;
+        context.kernel_stack = new_task.task.kernel_stack;
     }
 }
 
