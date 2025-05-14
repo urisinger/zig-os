@@ -2,12 +2,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Run (x86_64)",
+            "type": "f5anything",
+            "request": "launch",
+            "command": "make run-x86_64",
+        },
+        {
             "name": "Debug Kernel (x86_64)",
             "type": "gdb",
             "request": "attach",
             "target": "localhost:1234",
             "remote": true,
-            "stopAtEntry": true,
             "cwd": "${workspaceRoot}",
             "executable": "${workspaceRoot}/zig-out/bin/kernel",
             "preLaunchTask": "Start QEMU Debug"

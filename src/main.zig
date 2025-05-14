@@ -78,9 +78,9 @@ export fn _start() callconv(.C) noreturn {
 
     const user_pml4 = paging.createNewAddressSpace() catch unreachable;
 
-    elf.loadEfi(&elf_code, user_pml4, &user_vmm) catch unreachable;
+    elf.loadElf(&elf_code, user_pml4, &user_vmm) catch unreachable;
 
     //scheduler.createAndPopulateTask(allocator, &entry_code, "task_1");
-    //scheduler.enterUserMode();
+    //scheduler.start();
     cpu.halt();
 }
