@@ -1,0 +1,42 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Kernel",
+            "type": "shell",
+            "command": "make kernel",
+            "group": "build"
+        },
+        {
+            "label": "Run (x86_64)",
+            "type": "shell",
+            "command": "make run-x86_64",
+            "group": "test",
+            "dependsOn": ["Build Kernel"]
+        },
+        {
+            "label": "Run BIOS Mode",
+            "type": "shell",
+            "command": "make run-bios",
+            "group": "test",
+            "dependsOn": ["Build Kernel"]
+        },
+        {
+            "label": "Start QEMU Debug",
+            "type": "shell",
+            "command": "make debug-x86_64",
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^$"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^.*QEMU.*$",
+                    "endsPattern": "^.*QEMU.*$"
+                }
+            },
+            "dependsOn": ["Build Kernel"]
+        }
+    ]
+} 

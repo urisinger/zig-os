@@ -116,12 +116,12 @@ limine/limine:
 
 .PHONY: kernel
 kernel:
-	cd kernel && zig build $(KZIGFLAGS) -Darch=$(KARCH)
+	zig build $(KZIGFLAGS) -Darch=$(KARCH)
 
 $(IMAGE_NAME).iso: limine/limine kernel
 	rm -rf iso_root
 	mkdir -p iso_root/boot
-	cp -v kernel/zig-out/bin/kernel iso_root/boot/
+	cp -v zig-out/bin/kernel iso_root/boot/
 	mkdir -p iso_root/boot/limine
 	cp -v limine.conf iso_root/boot/limine/
 	mkdir -p iso_root/EFI/BOOT
@@ -161,7 +161,7 @@ ifeq ($(KARCH),x86_64)
 endif
 	mformat -i $(IMAGE_NAME).hdd@@1M
 	mmd -i $(IMAGE_NAME).hdd@@1M ::/EFI ::/EFI/BOOT ::/boot ::/boot/limine
-	mcopy -i $(IMAGE_NAME).hdd@@1M kernel/zig-out/bin/kernel ::/boot
+	mcopy -i $(IMAGE_NAME).hdd@@1M zig-out/bin/kernel ::/boot
 	mcopy -i $(IMAGE_NAME).hdd@@1M limine.conf ::/boot/limine
 ifeq ($(KARCH),x86_64)
 	mcopy -i $(IMAGE_NAME).hdd@@1M limine/limine-bios.sys ::/boot/limine
@@ -176,7 +176,7 @@ endif
 .PHONY: clean
 clean:
 	rm -rf iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd
-	rm -rf kernel/.zig-cache kernel/zig-cache kernel/zig-out
+	rm -rf .zig-cache zig-cache zig-out
 
 .PHONY: distclean
 distclean: clean

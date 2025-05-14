@@ -38,16 +38,12 @@ const elf_code align(@alignOf(std.elf.Elf64_Ehdr)) = @embedFile("user_elf").*;
 const elf = @import("exec/efi.zig");
 const syscall = @import("idt/syscall.zig");
 
-pub const std_options: std.Options = .{
-    .logFn = logger.logFn,
-    .log_level = .debug,
-};
+pub const std_options: std.Options = .{ .logFn = logger.logFn, .log_level = .debug, .page_size_max = utils.LARGE_PAGE_SIZE, .page_size_min = utils.PAGE_SIZE };
 
 const entry_code = [_]u8{
     0x0F, 0x05, // pause
     0xeb, 0xfc, // jmp $-3
 };
-
 
 export fn _start() callconv(.C) noreturn {
     cpu.cli();
@@ -61,7 +57,6 @@ export fn _start() callconv(.C) noreturn {
     core.init();
 
     idt.init();
-
 
     kheap.init();
     console.init();
@@ -78,7 +73,6 @@ export fn _start() callconv(.C) noreturn {
     syscall.init();
 
     const allocator = core.context().gpa.allocator();
-
 
     var user_vmm = uvmm.VmAllocator.init(allocator, utils.MB(1), 0x00007FFFFFFFFFFF);
 

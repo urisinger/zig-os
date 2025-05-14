@@ -7,3 +7,6 @@
 /*.iso
 /*.hdd
 /stdout.txt
+/.zig-cache
+/zig-cache
+/zig-out

@@ -3,7 +3,6 @@ const log = std.log;
 const elf = std.elf;
 const Header = elf.Header;
 
-
 const page_table = @import("../memory/page_table.zig");
 const uvmm = @import("../memory/user/vmm.zig");
 

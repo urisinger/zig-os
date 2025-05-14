@@ -23,12 +23,8 @@ pub const BootParams = struct {
 pub var params: ?BootParams = null;
 
 pub fn init() void {
-    if (!base_revision.is_supported()) {
-        @panic("limine revision not supported");
-    }
-
     const mem_map_response = memory_map_request.response.?;
-    const mem_map = mem_map_response.entries_ptr[0..mem_map_response.entry_count];
+    const mem_map = mem_map_response.getEntries();
 
     params = BootParams{
         .memory_map = mem_map,

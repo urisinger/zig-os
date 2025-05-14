@@ -73,7 +73,7 @@ pub fn init() !void {
 
     var bitmap_page: u64 = 0;
     for (mem_map) |mem_entry| {
-        if (mem_entry.kind == .usable and mem_entry.length > bitmap_num_pages * utils.PAGE_SIZE) {
+        if (mem_entry.type == .usable and mem_entry.length > bitmap_num_pages * utils.PAGE_SIZE) {
             bitmap_page = @divExact(mem_entry.base, utils.PAGE_SIZE);
             break;
         }
@@ -82,7 +82,7 @@ pub fn init() !void {
     const bitmap_vaddr: [*]u32 = @alignCast(@ptrCast(@as([*]u8, @ptrFromInt(bitmap_page * utils.PAGE_SIZE)) + offset));
 
     for (mem_map) |mem_entry| {
-        if (mem_entry.kind == .usable) {
+        if (mem_entry.type == .usable) {
             for (@divExact(mem_entry.base, utils.PAGE_SIZE)..@divExact(mem_entry.base + mem_entry.length, utils.PAGE_SIZE)) |page_index| {
                 const int_index = page_index / 32;
                 const bit_index = page_index % 32;

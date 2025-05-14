@@ -66,13 +66,11 @@ pub fn build(b: *std.Build) !void {
         .code_model = code_model,
     });
 
-    kernel.setLinkerScriptPath(linker_script_path);
+    kernel.setLinkerScript(linker_script_path);
 
     kernel.want_lto = false;
 
     const user_module = b.createModule(.{.root_source_file = user.getEmittedBin()});
-
-    try user_module.depending_steps.put(b.allocator, user, {});
 
     kernel.root_module.addImport("limine", limine.module("limine"));
     kernel.root_module.addImport("user_elf", user_module);
@@ -92,7 +90,7 @@ pub fn build(b: *std.Build) !void {
 
     const user_check_module = b.createModule(.{.root_source_file = b.path("src/main.zig")});
 
-    kernel_check.setLinkerScriptPath(linker_script_path);
+    kernel_check.setLinkerScript(linker_script_path);
 
     kernel_check.want_lto = false;
     kernel_check.root_module.addImport("limine", limine.module("limine"));

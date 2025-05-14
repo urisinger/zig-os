@@ -26,7 +26,6 @@ pub fn GB(gb: u64) u64 {
 }
 
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, _: ?usize) noreturn {
-    @setCold(true);
     log.err("KERNEL PANIC: {s}\n", .{msg});
 
     if (error_return_trace) |trace| {
