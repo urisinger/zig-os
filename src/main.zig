@@ -35,7 +35,7 @@ const uheap = @import("memory/user/heap.zig");
 const core = @import("core.zig");
 
 const elf_code align(@alignOf(std.elf.Elf64_Ehdr)) = @embedFile("user_elf").*;
-const elf = @import("exec/efi.zig");
+const elf = @import("exec/elf.zig");
 const syscall = @import("idt/syscall.zig");
 
 pub const std_options: std.Options = .{ .logFn = logger.logFn, .log_level = .debug, .page_size_max = utils.LARGE_PAGE_SIZE, .page_size_min = utils.PAGE_SIZE };
@@ -74,7 +74,7 @@ export fn _start() callconv(.C) noreturn {
 
     const allocator = core.context().gpa.allocator();
 
-    var user_vmm = uvmm.VmAllocator.init(allocator, utils.MB(1), 0x00007FFFFFFFFFFF);
+    var user_vmm = uvmm.VmAllocator.initAllocator(allocator, 0x00007FFFFFFFFFFF) catch unreachable;
 
     const user_pml4 = paging.createNewAddressSpace() catch unreachable;
 

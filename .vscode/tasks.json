@@ -8,24 +8,26 @@
             "group": "build"
         },
         {
-            "label": "Start QEMU Debug",
-            "type": "shell",
-            "command": "make",
-            "args": ["debug-x86_64"],
-            "options": {
+              "label": "Start QEMU Debug",
+              "type": "shell",
+              "command": "make",
+              "args": ["debug-x86_64"],
+              "options": {
                 "cwd": "${workspaceRoot}"
-            },
-            "problemMatcher": {
-                "pattern": {
-                    "regexp": "^$"
-                },
-                "background": {
+              },
+              "isBackground": true,
+              "problemMatcher": [
+                {
+                  "pattern": {
+                    "regexp": "^$"  // dummy, not used
+                  },
+                  "background": {
                     "activeOnStart": true,
-                    "beginsPattern": "^.*QEMU.*$",
-                    "endsPattern": "^.*QEMU.*$"
+                    "beginsPattern": "^qemu-system-.*$",
+                    "endsPattern": "^qemu-system-.*$"
+                  }
                 }
-            },
-            "dependsOn": ["Build Kernel"]
-        }
+              ]
+            }
     ]
 } 

@@ -1,125 +1,273 @@
 const std = @import("std");
 
+pub const Attr = enum { Free, Read, ReadWrite, ReadExecute };
+
+pub const Color = enum { Red, Black };
+
+const Dir = enum {
+    Left,
+    Right,
+
+    fn opposite(self: Dir) Dir {
+        return switch (self) {
+            .Left => .Right,
+            .Right => .Left,
+        };
+    }
+};
+
 pub const Region = struct {
     base: u64,
     size: u64,
-    next: ?*Region = null,
-    prev: ?*Region = null,
+    attr: Attr,
+};
+
+pub const Node = struct {
+    region: Region,
+
+    left: ?*Node = null,
+    right: ?*Node = null,
+    parent: ?*Node = null,
+    color: Color = .Red,
+
+    pub fn node(self: *Node, dir: Dir) *?*Node {
+        return switch (dir) {
+            .Left => &self.left,
+            .Right => &self.right,
+        };
+    }
+
+    pub fn direction(self: *Node) Dir {
+        return if (self.parent.?.left == self) .Left else .Right;
+    }
+
+    pub fn sibling(self: *Node) ?*Node {
+        return if (self.parent) |parent| if (parent.left == self) parent.right else parent.left else null;
+    }
+
+    pub fn grandparent(self: *Node) ?*Node {
+        return if (self.parent) |parent| parent.parent else null;
+    }
 };
 
 pub const VmAllocator = struct {
-    head: ?*Region = null,
-    tail: ?*Region = null,
+    root: ?*Node,
     allocator: std.mem.Allocator,
 
-    pub fn init(allocator: std.mem.Allocator, base: u64, size: u64) VmAllocator {
-        const region = allocator.create(Region) catch unreachable;
+    pub fn initAllocator(allocator: std.mem.Allocator, size: u64) !VmAllocator {
+        const root = try allocator.create(Node);
+        root.* = Node{
+            .region = Region{
+                .base = 0,
+                .size = size,
+                .attr = .Free,
+            },
+            .color = .Black,
+        };
 
-        region.* = .{ .base = base, .size = size, .next = null, .prev = null };
-
-        return .{ .head = region, .tail = region, .allocator = allocator };
+        return VmAllocator{
+            .root = root,
+            .allocator = allocator,
+        };
     }
 
-    pub fn alloc(self: *VmAllocator, size: usize, alignment: usize) ?usize {
-        var current = self.head;
+    pub fn deinit(self: *VmAllocator) void {
+        if (self.root) |root| {
+            self.free(root);
+        }
+    }
 
-        while (current) |r| {
-            const aligned_base = std.mem.alignForward(usize, r.base, alignment);
-            const padding = aligned_base - r.base;
+    fn free(self: *VmAllocator, node: *Node) void {
+        if (node.left) |left| {
+            self.free(left);
+        }
 
-            if (r.size >= padding + size) {
-                const alloc_base = aligned_base;
-                const alloc_end = alloc_base + size;
+        if (node.right) |right| {
+            self.free(right);
+        }
 
-                // Remove region or shrink it
-                if (padding + size == r.size) {
-                    if (r.prev) |p| {
-                        p.next = r.next;
-                    } else {
-                        self.head = r.next;
-                    }
+        self.allocator.destroy(node);
+    }
 
-                    if (r.next) |n| {
-                        n.prev = r.prev;
-                    } else {
-                        self.tail = r.prev;
-                    }
+    fn rotate(self: *VmAllocator, node: *Node, dir: Dir) ?*Node {
+        const parent = node.parent;
+        const new_root: *Node = if (node.node(dir.opposite()).*) |n| n else return null;
+        const new_child = new_root.node(dir);
 
-                    self.allocator.destroy(r);
-                } else {
-                    r.base = alloc_end;
-                    r.size -= padding + size;
+        node.node(dir.opposite()).* = new_root;
+
+        if (new_child.*) |child| {
+            child.parent = node;
+        }
+
+        new_root.parent = parent;
+        new_root.node(dir).* = node;
+
+        node.parent = new_root;
+        if (parent) |p| {
+            p.node(node.direction()).* = new_root;
+        } else {
+            self.root = new_root;
+        }
+
+        return new_root;
+    }
+
+    pub fn insert(self: *VmAllocator, node: *Node, null_parent: ?*Node, dir: Dir) void {
+        node.color = .Red;
+        node.parent = null_parent;
+
+        if (null_parent) |p| {
+            p.node(dir).* = node;
+        } else {
+            self.root = node;
+            return;
+        }
+
+        var current = node;
+        while (current.parent) |parent| {
+            if (parent.color == .Black) return;
+
+            const grandparent = if (parent.grandparent()) |gp| gp else {
+                parent.color = .Black;
+                return;
+            };
+
+            const parent_dir = parent.direction();
+            const uncle = grandparent.node(parent_dir.opposite()).*;
+            if (uncle == null or uncle.?.color == .Red) {
+                var p = parent;
+                if (current == parent.node(parent_dir).*) {
+                    _ = self.rotate(parent, parent_dir.opposite());
+
+                    p = current;
+                    current = parent;
                 }
 
-                return alloc_base;
+                _ = self.rotate(grandparent, parent_dir);
+                parent.color = .Black;
+                grandparent.color = .Red;
+                return;
             }
 
-            current = r.next;
+            uncle.?.color = .Black;
+            parent.color = .Black;
+            current = grandparent;
         }
-
-        return null;
     }
 
-    pub fn destroy(self: *VmAllocator) void {
-        var current = self.head;
-
-        while (current) |region| {
-            const next = region.next;
-            self.allocator.destroy(region);
-            current = next;
+    pub fn delete(self: *VmAllocator, node: *Node) *Node {
+        if (node.parent == null) {
+            self.root = null;
+            return node;
         }
 
-        self.head = null;
-        self.tail = null;
-    }
+        var dir = node.direction();
+        var to_remove = node;
 
-    pub fn free(self: *VmAllocator, addr: usize, size: usize) void {
-        const new_region = self.allocator.create(Region) catch unreachable;
-        new_region.* = .{ .base = addr, .size = size, .next = null, .prev = null };
-
-        // Insert in sorted order
-        if (self.head == null or addr < self.head.?.base) {
-            new_region.next = self.head;
-            if (self.head) |h| h.prev = new_region;
-            self.head = new_region;
-            if (self.tail == null) self.tail = new_region;
-        } else {
-            var current = self.head;
-            while (current.?.next) |next| {
-                if (addr < next.base) break;
-                current = next;
+        // Case 1: Node has two children
+        if (node.left != null and node.right != null) {
+            // Find successor (leftmost in right subtree)
+            var successor = node.right.?;
+            while (successor.left) |left| {
+                successor = left;
             }
 
-            new_region.next = current.?.next;
-            if (current.?.next) |n| n.prev = new_region;
+            // Swap the nodes' regions
+            const temp = node.region;
+            node.region = successor.region;
+            successor.region = temp;
 
-            new_region.prev = current;
-            current.?.next = new_region;
-
-            if (new_region.next == null)
-                self.tail = new_region;
+            // Now delete the successor instead (which has at most one child)
+            to_remove = successor;
+            dir = if (successor.parent.? == node) .Right else .Left;
         }
 
-        // Merge forward
-        var r = new_region;
-        while (r.next != null and r.base + r.size == r.next.?.base) {
-            const next = r.next.?;
-            r.size += next.size;
-            r.next = next.next;
-            if (next.next) |n| n.prev = r;
-            if (self.tail == next) self.tail = r;
-            self.allocator.destroy(next);
+        // At this point, to_remove has at most one child
+        const child = if (to_remove.left) |left| left else to_remove.right;
+
+        // Case 2: Node has one child
+        if (child) |c| {
+            c.parent = to_remove.parent;
+            c.color = .Black;
+            to_remove.parent.?.node(dir).* = c;
+            return to_remove;
         }
 
-        // Merge backward
-        if (r.prev != null and r.prev.?.base + r.prev.?.size == r.base) {
-            const prev = r.prev.?;
-            prev.size += r.size;
-            prev.next = r.next;
-            if (r.next) |n| n.prev = prev;
-            if (self.tail == r) self.tail = prev;
-            self.allocator.destroy(r);
+        // Case 3: Node is root with no children (handled above)
+        // Case 4: Node is red with no children
+        if (to_remove.color == .Red) {
+            to_remove.parent.?.node(dir).* = null;
+            return to_remove;
         }
+
+        // Case 5: Node is black with no children
+        // Remove node and rebalance
+        to_remove.parent.?.node(dir).* = null;
+
+        var current = to_remove.parent.?;
+        dir = to_remove.direction();
+
+        // Do rebalancing...
+        while (current.parent) |parent| {
+            var sibling = parent.sibling();
+            var distant_nephew = sibling.?.node(dir.opposite()).*;
+            const close_nephew = sibling.?.node(dir).*;
+            if (sibling.?.color == .Red) {
+                _ = self.rotate(parent, dir);
+                parent.color = .Red;
+                sibling.?.color = .Black;
+                sibling = close_nephew;
+                if (distant_nephew != null and distant_nephew.?.color == .Red) {
+                    _ = self.rotate(parent, dir);
+                    distant_nephew.?.color = .Black;
+                    sibling.?.color = .Black;
+                    parent.color = .Red;
+                    return to_remove;
+                }
+
+                if (close_nephew != null and close_nephew.?.color == .Red) {
+                    _ = self.rotate(sibling.?, dir.opposite());
+                    sibling.?.color = .Red;
+                    close_nephew.?.color = .Black;
+                    distant_nephew = sibling;
+                    sibling = close_nephew;
+                    return to_remove;
+                }
+
+                sibling.?.color = .Red;
+                parent.color = .Black;
+                return to_remove;
+            }
+
+            if (distant_nephew != null and distant_nephew.?.color == .Red) {
+                _ = self.rotate(parent, dir);
+                distant_nephew.?.color = .Black;
+                sibling.?.color = .Black;
+                parent.color = .Red;
+                return to_remove;
+            }
+
+            if (close_nephew != null and close_nephew.?.color == .Red) {
+                _ = self.rotate(sibling.?, dir.opposite());
+                sibling.?.color = .Red;
+                close_nephew.?.color = .Black;
+                distant_nephew = sibling;
+                sibling = close_nephew;
+                return to_remove;
+            }
+
+            if (parent.color == .Red) {
+                sibling.?.color = .Red;
+                parent.color = .Black;
+                return to_remove;
+            }
+
+            sibling.?.color = .Red;
+            current = parent;
+        }
+
+        return to_remove;
     }
 };
 
@@ -131,68 +279,125 @@ fn initAllocator() !VmAllocator {
     return VmAllocator.init(std.testing.allocator, 0x100000, 64 * PAGE);
 }
 
-test "basic allocation works" {
-    var vm = try initAllocator();
-    const addr = vm.alloc(PAGE, PAGE).?;
-    try testing.expect(addr >= 0x100000);
-    vm.destroy();
+fn initTestAllocator() !VmAllocator {
+    return VmAllocator.initAllocator(testing.allocator, 1024 * 1024);
 }
 
-test "alignment is respected" {
-    var vm = try initAllocator();
-    const addr = vm.alloc(PAGE, PAGE * 4).?;
-    try testing.expect(addr % (PAGE * 4) == 0);
-    vm.destroy();
+test "init creates black root" {
+    const vm = try initTestAllocator();
+    const root = vm.root.?;
+    defer testing.allocator.destroy(root);
+    try testing.expect(vm.root != null);
+    try testing.expect(vm.root.?.color == .Black);
+    try testing.expect(vm.root.?.region.size == 1024 * 1024);
 }
 
-test "free merges forward" {
-    var vm = try initAllocator();
-    const a = vm.alloc(PAGE, PAGE).?;
-    const b = vm.alloc(PAGE, PAGE).?;
-    vm.free(a, PAGE);
-    vm.free(b, PAGE);
-    const merged = vm.alloc(2 * PAGE, PAGE);
-    try testing.expect(merged == a);
-    vm.destroy();
+test "insert maintains red-black properties" {
+    var vm = try initTestAllocator();
+    const root = vm.root.?;
+    defer testing.allocator.destroy(root);
+    // Create some nodes
+    const node1 = try vm.allocator.create(Node);
+    defer vm.allocator.destroy(node1);
+    node1.* = .{
+        .region = .{ .base = 100, .size = 100, .attr = .Free },
+        .color = .Red,
+    };
+
+    const node2 = try vm.allocator.create(Node);
+    defer vm.allocator.destroy(node2);
+    node2.* = .{
+        .region = .{ .base = 200, .size = 100, .attr = .Free },
+        .color = .Red,
+    };
+
+    // Insert nodes
+    vm.insert(node1, vm.root.?, .Left);
+    vm.insert(node2, vm.root.?, .Right);
+
+    // Verify properties
+    try testing.expectEqual(vm.root.?.color, .Black);
+    try testing.expectEqual(node1.color, .Red);
+    try testing.expectEqual(node2.color, .Red);
+    try testing.expectEqual(node1.parent, vm.root);
+    try testing.expectEqual(node2.parent, vm.root);
 }
 
-test "free merges backward" {
-    var vm = try initAllocator();
-    const a = vm.alloc(PAGE, PAGE).?;
-    const b = vm.alloc(PAGE, PAGE).?;
-    vm.free(b, PAGE);
-    vm.free(a, PAGE);
-    const merged = vm.alloc(2 * PAGE, PAGE);
-    try testing.expect(merged == a);
-    vm.destroy();
+test "delete leaf node" {
+    var vm = try initTestAllocator();
+    defer vm.deinit();
+    const node = try vm.allocator.create(Node);
+    node.* = .{
+        .region = .{ .base = 100, .size = 100, .attr = .Free },
+        .color = .Red,
+    };
+
+    vm.insert(node, vm.root.?, .Left);
+    const to_free = vm.delete(node);
+    defer vm.allocator.destroy(to_free);
+
+    try testing.expectEqual(vm.root.?.left, null);
 }
 
-test "free merges both directions" {
-    var vm = try initAllocator();
-    const a = vm.alloc(PAGE, PAGE).?;
-    const b = vm.alloc(PAGE, PAGE).?;
-    const c = vm.alloc(PAGE, PAGE).?;
-    vm.free(a, PAGE);
-    vm.free(c, PAGE);
-    vm.free(b, PAGE);
-    const merged = vm.alloc(3 * PAGE, PAGE);
-    try testing.expect(merged == a);
-    vm.destroy();
+test "delete node with one child" {
+    var vm = try initTestAllocator();
+    defer vm.deinit();
+    const parent = try vm.allocator.create(Node);
+    parent.* = .{
+        .region = .{ .base = 200, .size = 100, .attr = .Free },
+        .color = .Black,
+    };
+
+    const child = try vm.allocator.create(Node);
+    child.* = .{
+        .region = .{ .base = 100, .size = 100, .attr = .Free },
+        .color = .Red,
+    };
+
+    vm.insert(parent, vm.root.?, .Left);
+    vm.insert(child, parent, .Left);
+
+    const to_free = vm.delete(parent);
+    defer vm.allocator.destroy(to_free);
+
+    try testing.expectEqual(vm.root.?.left, child);
+    try testing.expectEqual(child.color, .Black);
 }
 
-test "full range reuse after free" {
-    var vm = try initAllocator();
-    const base = vm.alloc(64 * PAGE, PAGE).?;
-    vm.free(base, 64 * PAGE);
-    const again = vm.alloc(64 * PAGE, PAGE).?;
-    try testing.expect(again == base);
-    vm.destroy();
-}
+test "delete node with two children" {
+    var vm = try initTestAllocator();
+    defer vm.deinit();
 
-test "out of memory returns null" {
-    var vm = try initAllocator();
-    _ = vm.alloc(64 * PAGE, PAGE).?;
-    const fail = vm.alloc(PAGE, PAGE);
-    try testing.expect(fail == null);
-    vm.destroy();
+    const node = try vm.allocator.create(Node);
+    const left = try vm.allocator.create(Node);
+    const right = try vm.allocator.create(Node);
+
+    node.* = .{
+        .region = .{ .base = 200, .size = 100, .attr = .Free },
+        .color = .Black,
+    };
+
+    left.* = .{
+        .region = .{ .base = 100, .size = 100, .attr = .Free },
+        .color = .Red,
+    };
+
+    right.* = .{
+        .region = .{ .base = 300, .size = 100, .attr = .Free },
+        .color = .Red,
+    };
+
+    vm.insert(node, vm.root.?, .Left);
+    vm.insert(left, node, .Left);
+    vm.insert(right, node, .Right);
+
+    const original_base = node.region.base;
+    const to_free = vm.delete(node);
+    defer vm.allocator.destroy(to_free);
+
+    try testing.expect(to_free == right); // The successor (right) should be the node we need to free
+    try testing.expect(original_base != node.region.base);
+    try testing.expectEqual(node.left, left);
+    try testing.expectEqual(left.parent, node);
+    try testing.expectEqual(node.right, null);
 }
