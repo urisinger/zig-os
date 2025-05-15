@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.main);
 
-const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false });
+const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false, .page_size = utils.PAGE_SIZE });
 
 const logger = @import("logger.zig");
 
@@ -38,7 +38,12 @@ const elf_code align(@alignOf(std.elf.Elf64_Ehdr)) = @embedFile("user_elf").*;
 const elf = @import("exec/elf.zig");
 const syscall = @import("idt/syscall.zig");
 
-pub const std_options: std.Options = .{ .logFn = logger.logFn, .log_level = .debug, .page_size_max = utils.LARGE_PAGE_SIZE, .page_size_min = utils.PAGE_SIZE };
+pub const std_options: std.Options = .{
+    .logFn = logger.logFn,
+    .log_level = .debug,
+    .page_size_max = utils.LARGE_PAGE_SIZE,
+    .page_size_min = utils.PAGE_SIZE,
+};
 
 const entry_code = [_]u8{
     0x0F, 0x05, // pause
@@ -74,13 +79,7 @@ export fn _start() callconv(.C) noreturn {
 
     const allocator = core.context().gpa.allocator();
 
-    var user_vmm = uvmm.VmAllocator.initAllocator(allocator, 0, 0x00007FFFFFFFFFFF) catch unreachable;
-
-    const user_pml4 = paging.createNewAddressSpace() catch unreachable;
-
-    elf.loadElf(&elf_code, user_pml4, &user_vmm) catch unreachable;
-
-    //scheduler.createAndPopulateTask(allocator, &entry_code, "task_1");
-    //scheduler.start();
+    scheduler.insertTask(allocator, elf.elfTask(&elf_code, allocator) catch unreachable, "task_1") catch unreachable;
+    scheduler.start();
     cpu.halt();
 }

@@ -173,20 +173,18 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
                 cpu.push_gpr();
 
                 asm volatile (
-                   \\ mov $0x10, %ax 
-                   \\ mov %ax, %ds
-                   \\ mov %ax, %es
-
-                   \\ mov %rsp, %rdi
-                   \\ call interruptDispatch
-                   \\ mov %rax, %rsp
-
-                   \\ mov $0x1B, %ax 
-                   \\ mov %ax, %ds
-                   \\ mov %ax, %es 
+                    \\ mov $0x10, %ax 
+                    \\ mov %ax, %ds
+                    \\ mov %ax, %es
+                    \\ mov %rsp, %rdi
+                    \\ call interruptDispatch
+                    \\ mov %rax, %rsp
+                    \\ mov $0x1B, %ax 
+                    \\ mov %ax, %ds
+                    \\ mov %ax, %es 
                 );
 
-                cpu.pop_gpr(); 
+                cpu.pop_gpr();
                 asm volatile ("add $16, %rsp");
 
                 cpu.swapgs_if_necessary();

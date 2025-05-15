@@ -1,6 +1,21 @@
 const std = @import("std");
 
-pub const Attr = enum { Read, ReadWrite, ReadExecute };
+pub const Permissions = enum { Read, ReadWrite, ReadExecute };
+
+pub const Attr = struct {
+    permissions: Permissions,
+};
+
+pub const Region = struct {
+    start: u64,
+    end: u64,
+
+    attr: Attr,
+
+    pub fn size(self: Region) u64 {
+        return self.end - self.start;
+    }
+};
 
 pub const Color = enum { Red, Black };
 
@@ -13,16 +28,6 @@ const Dir = enum {
             .Left => .Right,
             .Right => .Left,
         };
-    }
-};
-
-pub const Region = struct {
-    start: u64,
-    end: u64,
-    attr: Attr,
-
-    pub fn size(self: Region) u64 {
-        return self.end - self.start;
     }
 };
 
@@ -117,7 +122,7 @@ pub const VmAllocator = struct {
         try self.format_recursive(n.right, depth + 1, writer);
     }
 
-    pub fn initAllocator(allocator: std.mem.Allocator, start: u64, size: u64) VmAllocator {
+    pub fn init(allocator: std.mem.Allocator, start: u64, size: u64) VmAllocator {
         return VmAllocator{
             .root = null,
             .allocator = allocator,
@@ -144,30 +149,13 @@ pub const VmAllocator = struct {
         self.allocator.destroy(node);
     }
 
-    fn rotate(self: *VmAllocator, node: *Node, dir: Dir) ?*Node {
-        const parent = node.parent;
-        const new_root: *Node = if (node.node(dir.opposite()).*) |n| n else return null;
-        const new_child = new_root.node(dir).*;
-
-        // Update parent pointers first
-        new_root.parent = parent;
-        node.parent = new_root;
-        if (new_child) |child| {
-            child.parent = node;
+    pub fn find_node(self: *VmAllocator, addr: u64) ?*Node {
+        var current = self.root;
+        while (current) |node| {
+            if (addr >= node.region.start and addr < node.region.end) return node;
+            current = if (addr < node.region.start) node.left else node.right;
         }
-
-        // Then update child pointers
-        new_root.node(dir).* = node;
-        node.node(dir.opposite()).* = new_child;
-
-        // Finally update the parent's child pointer or root
-        if (parent) |p| {
-            p.node(node.direction()).* = new_root;
-        } else {
-            self.root = new_root;
-        }
-
-        return new_root;
+        return null;
     }
 
     pub fn allocate_address(self: *VmAllocator, base: u64, size: u64, attr: Attr) !void {
@@ -405,6 +393,32 @@ pub const VmAllocator = struct {
 
         return to_remove;
     }
+
+    fn rotate(self: *VmAllocator, node: *Node, dir: Dir) ?*Node {
+        const parent = node.parent;
+        const new_root: *Node = if (node.node(dir.opposite()).*) |n| n else return null;
+        const new_child = new_root.node(dir).*;
+
+        // Update parent pointers first
+        new_root.parent = parent;
+        node.parent = new_root;
+        if (new_child) |child| {
+            child.parent = node;
+        }
+
+        // Then update child pointers
+        new_root.node(dir).* = node;
+        node.node(dir.opposite()).* = new_child;
+
+        // Finally update the parent's child pointer or root
+        if (parent) |p| {
+            p.node(node.direction()).* = new_root;
+        } else {
+            self.root = new_root;
+        }
+
+        return new_root;
+    }
 };
 
 const PAGE = 0x1000;
@@ -412,11 +426,11 @@ const PAGE = 0x1000;
 const testing = std.testing;
 
 fn initTestAllocator() VmAllocator {
-    return VmAllocator.initAllocator(testing.allocator, 0, 1024 * 1024);
+    return VmAllocator.init(testing.allocator, 0, 1024 * 1024);
 }
 
 test "basic allocation with exact match" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0, 0x1000);
+    var vm = VmAllocator.init(testing.allocator, 0, 0x1000);
     defer vm.deinit();
 
     const addr = try vm.allocate(0x1000, 0x1000, .ReadWrite);
@@ -424,7 +438,7 @@ test "basic allocation with exact match" {
 }
 
 test "basic allocation with alignment offset" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x1000, 0x2000);
+    var vm = VmAllocator.init(testing.allocator, 0x1000, 0x2000);
     defer vm.deinit();
 
     const addr = try vm.allocate(1, 0x1000, .ReadWrite);
@@ -432,7 +446,7 @@ test "basic allocation with alignment offset" {
 }
 
 test "allocation fails with no space" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0, 0x1000);
+    var vm = VmAllocator.init(testing.allocator, 0, 0x1000);
     defer vm.deinit();
 
     const result = vm.allocate(0x1001, 0x1000, .ReadWrite);
@@ -440,7 +454,7 @@ test "allocation fails with no space" {
 }
 
 test "allocate_address: exact match" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x1000, 0x1000);
+    var vm = VmAllocator.init(testing.allocator, 0x1000, 0x1000);
     defer vm.deinit();
 
     try vm.allocate_address(0x1000, 0x1000, .Read);
@@ -450,7 +464,7 @@ test "allocate_address: exact match" {
 }
 
 test "allocate_address: partial fit inside larger region" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x1000, 0x4000);
+    var vm = VmAllocator.init(testing.allocator, 0x1000, 0x4000);
     defer vm.deinit();
 
     try vm.allocate_address(0x2000, 0x1000, .ReadWrite);
@@ -459,21 +473,21 @@ test "allocate_address: partial fit inside larger region" {
 }
 
 test "allocate_address: fails when no matching region exists" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x1000, 0x1000);
+    var vm = VmAllocator.init(testing.allocator, 0x1000, 0x1000);
     defer vm.deinit();
 
     try testing.expectError(error.InvalidAddress, vm.allocate_address(0x2000, 0x1000, .ReadWrite));
 }
 
 test "allocate_address: fails when region is too small" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x1000, 0x800);
+    var vm = VmAllocator.init(testing.allocator, 0x1000, 0x800);
     defer vm.deinit();
 
     try testing.expectError(error.InvalidAddress, vm.allocate_address(0x1000, 0x1000, .ReadWrite));
 }
 
 test "allocate fixed then dynamic" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x1000, 0x4000); // [0x1000–0x5000)
+    var vm = VmAllocator.init(testing.allocator, 0x1000, 0x4000); // [0x1000–0x5000)
     defer vm.deinit();
 
     try vm.allocate_address(0x3000, 0x1000, .ReadWrite); // Manually reserve 0x3000–0x4000
@@ -487,7 +501,7 @@ test "allocate fixed then dynamic" {
 }
 
 test "allocation with internal alignment gap" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x1000, 0x3000); // [0x1000–0x4000)
+    var vm = VmAllocator.init(testing.allocator, 0x1000, 0x3000); // [0x1000–0x4000)
     defer vm.deinit();
 
     // Allocate 0x800 with 0x1000 alignment: first aligned base is 0x1000
@@ -502,7 +516,7 @@ test "allocation with internal alignment gap" {
 }
 
 test "precise fills with aligned pages" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x0, 3 * PAGE);
+    var vm = VmAllocator.init(testing.allocator, 0x0, 3 * PAGE);
     defer vm.deinit();
 
     _ = try vm.allocate(PAGE, PAGE, .Read);
@@ -513,7 +527,7 @@ test "precise fills with aligned pages" {
 }
 
 test "allocate around existing fixed regions" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x1000, 0x5000); // [0x1000–0x6000)
+    var vm = VmAllocator.init(testing.allocator, 0x1000, 0x5000); // [0x1000–0x6000)
     defer vm.deinit();
 
     try vm.allocate_address(0x2000, 0x1000, .ReadWrite); // Reserve [0x2000–0x3000)
@@ -529,7 +543,7 @@ test "allocate around existing fixed regions" {
 }
 
 test "fragmented allocation fills range" {
-    var vm = VmAllocator.initAllocator(testing.allocator, 0x0, 0x3000); // [0x0–0x3000)
+    var vm = VmAllocator.init(testing.allocator, 0x0, 0x3000); // [0x0–0x3000)
     defer vm.deinit();
 
     // Fragmented allocations (out-of-order sizes)
