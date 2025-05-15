@@ -1,5 +1,5 @@
-export fn _start() callconv(.C) noreturn {
-    while (true){
-        asm volatile("syscall");
+export fn _start() callconv(.Naked) noreturn {
+    while (true) {
+        asm volatile ("syscall");
     }
 }

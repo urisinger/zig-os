@@ -85,11 +85,9 @@ pub fn loadElf(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_t
                 for (0..num_pages) |i| {
                     const vaddr = item.p_vaddr + i * utils.PAGE_SIZE;
                     const paddr = try pmm.allocatePage();
-                    if (item.p_filesz < i * utils.PAGE_SIZE) {
-                        const page_ptr: *align(utils.PAGE_SIZE) [4096]u8 = @ptrFromInt(paddr + globals.hhdm_offset);
+                    const page_ptr: *align(utils.PAGE_SIZE) [4096]u8 = @ptrFromInt(paddr + globals.hhdm_offset);
 
-                        @memcpy(page_ptr, buffer[item.p_offset + i * utils.PAGE_SIZE .. item.p_offset + (i + 1) * utils.PAGE_SIZE]);
-                    }
+                    @memcpy(page_ptr, buffer[item.p_offset + i * utils.PAGE_SIZE .. item.p_offset + (i + 1) * utils.PAGE_SIZE]);
 
                     try pml4.mapPage(@bitCast(vaddr), paddr, .{
                         .present = true,
