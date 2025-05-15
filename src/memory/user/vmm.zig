@@ -141,64 +141,25 @@ pub const VmAllocator = struct {
     }
 
     pub fn allocate_address(self: *VmAllocator, base: u64, size: u64, attr: Attr) !void {
-        const aligned_base = base;
-
-        const node = self.find_exact_gap(self.root, aligned_base, size) orelse return error.NoFreeMemory;
-
-        const new_node = try self.allocator.create(Node);
-        new_node.* = .{
-            .region = Region{
-                .start = aligned_base,
-                .end = aligned_base + size,
-                .attr = attr,
-            },
-            .color = .Red,
-        };
-
-        if (node.region.start < new_node.region.start) {
-            const new_left = try self.allocator.create(Node);
-            new_left.* = .{
-                .region = Region{
-                    .start = node.region.start,
-                    .end = new_node.region.start,
-                    .attr = .Free,
-                },
-            };
-            const new_right = try self.allocator.create(Node);
-            new_right.* = .{
-                .region = Region{
-                    .start = new_left.region.end,
-                    .end = node.region.end,
-                    .attr = .Free,
-                },
-                .color = .Red,
-            };
-            self.insert(new_left, node, .Left);
-            self.insert(new_right, node, .Right);
-            self.insert(new_node, new_right, .Left);
-        } else if (node.region.start == aligned_base) {
-            self.insert(new_node, node, .Left);
-        } else {
-            @panic("find_gap: invalid base");
-        }
+        return self.allocate_address_helper(self.root, base, base + size, attr) orelse error.NoFreeMemory;
     }
 
-    fn find_exact_gap(self: *VmAllocator, node: ?*Node, base: u64, size: u64) ?*Node {
+    fn allocate_address_helper(self: *VmAllocator, node: ?*Node, base: u64, end: u64, attr: Attr) ?void {
         if (node == null) return null;
         const n = node.?;
 
         if (n.left != null) {
-            if (self.find_exact_gap(n.left, base, size)) |found| return found;
+            if (self.allocate_address_helper(n.left, base, end)) |found| return found;
         }
 
         if (n.region.attr == .Free and n.left == null and n.right == null and
-            n.region.start <= base and n.region.end >= base + size)
+            n.region.start <= base and n.region.end >= end)
         {
             return n;
         }
 
         if (n.right != null) {
-            if (self.find_exact_gap(n.right, base, size)) |found| return found;
+            if (self.find_exact_gap(n.right, base, end)) |found| return found;
         }
 
         return null;
