@@ -8,8 +8,7 @@ pub export fn syscall_dispatch() callconv(.SysV) void {
 }
 
 pub fn syscall_handler() callconv(.Naked) void {
-
-    asm volatile  (
+    asm volatile (
         \\ swapgs
         \\ mov %gs:8, %rsp // load kernel stack 
         \\ sti

@@ -22,8 +22,8 @@ pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, allocator: st
 
     const entry_point = loadElf(buffer, user_pml4, &user_vmm) catch unreachable;
 
-    const user_stack_bottom = uheap.allocateUserPages(&user_vmm, user_pml4, 1) catch unreachable;
-    const user_stack_top = user_stack_bottom + utils.PAGE_SIZE;
+    const user_stack_bottom = uheap.allocateUserPages(&user_vmm, user_pml4, 3) catch unreachable;
+    const user_stack_top = user_stack_bottom + 3 * utils.PAGE_SIZE;
 
     const kernel_stack = kheap.allocatePages(2) catch unreachable;
 
@@ -58,36 +58,48 @@ pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, allocator: st
 pub fn loadElf(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_table.PageMapping, vmm: *uvmm.VmAllocator) !u64 {
     const header = try Header.parse(buffer[0..64]);
 
-    log.debug("elf header: {}", .{header});
-
     var iter = header.program_header_iterator(std.io.fixedBufferStream(buffer));
 
     while (try iter.next()) |item| {
         switch (item.p_type) {
             elf.PT_LOAD => {
-                const read_write: page_table.ReadWrite = if (item.p_flags & elf.PF_W != 0) .read_write else .read_execute;
+                const page_size = utils.PAGE_SIZE;
 
-                if (item.p_flags & elf.PF_X != 0) {
-                    log.debug("program header is executable", .{});
-                }
+                const file_offset_page = std.mem.alignBackward(u64, item.p_offset, page_size);
+                const virt_base = std.mem.alignBackward(u64, item.p_vaddr, page_size);
+                const virt_delta = item.p_vaddr - virt_base;
 
-                if (item.p_flags & elf.PF_W != 0) {
-                    log.debug("program header is writable", .{});
-                }
+                const map_size = std.mem.alignForward(u64, item.p_memsz + virt_delta, page_size);
 
-                if (item.p_flags & elf.PF_R != 0) {}
-
-                try vmm.allocate_address(item.p_vaddr, item.p_memsz, .{
-                    .permissions = .ReadWrite,
+                try vmm.allocate_address(virt_base, map_size, .{
+                    .permissions = if (item.p_flags & elf.PF_W != 0) .ReadWrite else if (item.p_flags & elf.PF_X != 0) .ReadExecute else .Read,
                 });
 
-                const num_pages = item.p_memsz / utils.PAGE_SIZE;
-                for (0..num_pages) |i| {
-                    const vaddr = item.p_vaddr + i * utils.PAGE_SIZE;
-                    const paddr = try pmm.allocatePage();
-                    const page_ptr: *align(utils.PAGE_SIZE) [4096]u8 = @ptrFromInt(paddr + globals.hhdm_offset);
+                const read_write: page_table.ReadWrite =
+                    if (item.p_flags & elf.PF_W != 0) .read_write else .read_execute;
 
-                    @memcpy(page_ptr, buffer[item.p_offset + i * utils.PAGE_SIZE .. item.p_offset + (i + 1) * utils.PAGE_SIZE]);
+                const num_pages = map_size / page_size;
+                for (0..num_pages) |i| {
+                    const vaddr = virt_base + i * page_size;
+                    const paddr = try pmm.allocatePage();
+                    const page_ptr: *align(page_size) [4096]u8 = @ptrFromInt(paddr + globals.hhdm_offset);
+
+                    // If we are in file, copy to file buffer
+                    const file_pos = file_offset_page + i * page_size;
+                    const file_end = item.p_offset + item.p_filesz;
+
+                    if (file_pos + page_size <= file_end) {
+                        // full page copy
+                        @memcpy(page_ptr, buffer[file_pos .. file_pos + page_size]);
+                    } else if (file_pos < file_end) {
+                        // partial page copy, zero the rest
+                        const valid_bytes = file_end - file_pos;
+                        @memcpy(page_ptr[0..valid_bytes], buffer[file_pos..file_end]);
+                        @memset(page_ptr[valid_bytes..], 0);
+                    } else {
+                        // bss region (zero-initialized)
+                        @memset(page_ptr, 0);
+                    }
 
                     try pml4.mapPage(@bitCast(vaddr), paddr, .{
                         .present = true,

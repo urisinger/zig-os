@@ -55,8 +55,6 @@ pub fn build(b: *std.Build) !void {
         .code_model = .default,
     });
 
-    
-
     const limine = b.dependency("limine", .{});
     const kernel = b.addExecutable(.{
         .name = "kernel",
@@ -70,7 +68,7 @@ pub fn build(b: *std.Build) !void {
 
     kernel.want_lto = false;
 
-    const user_module = b.createModule(.{.root_source_file = user.getEmittedBin()});
+    const user_module = b.createModule(.{ .root_source_file = user.getEmittedBin() });
 
     kernel.root_module.addImport("limine", limine.module("limine"));
     kernel.root_module.addImport("user_elf", user_module);
@@ -87,8 +85,7 @@ pub fn build(b: *std.Build) !void {
         .code_model = code_model,
     });
 
-
-    const user_check_module = b.createModule(.{.root_source_file = b.path("src/main.zig")});
+    const user_check_module = b.createModule(.{ .root_source_file = b.path("src/main.zig") });
 
     kernel_check.setLinkerScript(linker_script_path);
 

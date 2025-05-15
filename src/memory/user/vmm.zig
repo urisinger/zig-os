@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.vmm);
 
 pub const Permissions = enum { Read, ReadWrite, ReadExecute };
 
@@ -192,6 +193,7 @@ pub const VmAllocator = struct {
     }
 
     pub fn insert_region(self: *VmAllocator, region: Region) !void {
+        log.debug("inserting region: {x}-{x}", .{ region.start, region.end });
         const node = try self.allocator.create(Node);
         node.* = .{
             .region = region,

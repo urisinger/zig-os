@@ -102,6 +102,7 @@ pub export fn start() noreturn {
     log.info("starting kernel", .{});
     asm volatile (
         \\ swapgs
+        \\ xchg %bx, %bx
         \\ mov $0x1B, %ax
         \\ mov %ax, %ds
         \\ mov %ax, %es
