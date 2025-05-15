@@ -32,14 +32,7 @@ pub fn loadElf(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_t
                     log.debug("program header is readable", .{});
                 }
 
-                const start = item.p_vaddr;
-                const end = start + item.p_memsz;
-
-                const page_count = (end - start) / utils.PAGE_SIZE;
-
-                const pages = try vmm.allocatePages(page_count);
-
-                try pml4.mapPages(start, pages, page_count, .user);
+                vmm.allocate_address(item.p_vaddr, item.p_memsz, .ReadWrite) catch unreachable;
             },
             else => {},
         }

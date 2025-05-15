@@ -74,7 +74,7 @@ export fn _start() callconv(.C) noreturn {
 
     const allocator = core.context().gpa.allocator();
 
-    var user_vmm = uvmm.VmAllocator.initAllocator(allocator, 0x00007FFFFFFFFFFF) catch unreachable;
+    var user_vmm = uvmm.VmAllocator.initAllocator(allocator, 0, 0x00007FFFFFFFFFFF) catch unreachable;
 
     const user_pml4 = paging.createNewAddressSpace() catch unreachable;
 

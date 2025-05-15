@@ -17,9 +17,13 @@ const Dir = enum {
 };
 
 pub const Region = struct {
-    base: u64,
-    size: u64,
+    start: u64,
+    end: u64,
     attr: Attr,
+
+    pub fn size(self: Region) u64 {
+        return self.end - self.start;
+    }
 };
 
 pub const Node = struct {
@@ -54,12 +58,35 @@ pub const VmAllocator = struct {
     root: ?*Node,
     allocator: std.mem.Allocator,
 
-    pub fn initAllocator(allocator: std.mem.Allocator, size: u64) !VmAllocator {
+    pub fn format(self: VmAllocator, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
+        try writer.print("VmAllocator:\n", .{});
+        try self.format_recursive(self.root, 0, writer);
+    }
+
+    fn format_recursive(self: VmAllocator, node: ?*Node, depth: usize, writer: anytype) !void {
+        if (node == null) return;
+
+        const n = node.?;
+
+        // Left subtree first
+        try self.format_recursive(n.right, depth + 1, writer);
+
+        // Indentation
+        try writer.writeByteNTimes(' ', depth * 2);
+
+        // Node information
+        try writer.print("└─ [{x}-{x}) size={} attr={}\n", .{ n.region.start, n.region.end, n.region.size(), n.region.attr });
+
+        // Right subtree next
+        try self.format_recursive(n.left, depth + 1, writer);
+    }
+
+    pub fn initAllocator(allocator: std.mem.Allocator, base: u64, size: u64) !VmAllocator {
         const root = try allocator.create(Node);
         root.* = Node{
             .region = Region{
-                .base = 0,
-                .size = size,
+                .start = base,
+                .end = base + size,
                 .attr = .Free,
             },
             .color = .Black,
@@ -111,6 +138,157 @@ pub const VmAllocator = struct {
         }
 
         return new_root;
+    }
+
+    pub fn allocate_address(self: *VmAllocator, base: u64, size: u64, attr: Attr) !void {
+        const aligned_base = base;
+
+        const node = self.find_exact_gap(self.root, aligned_base, size) orelse return error.NoFreeMemory;
+
+        const new_node = try self.allocator.create(Node);
+        new_node.* = .{
+            .region = Region{
+                .start = aligned_base,
+                .end = aligned_base + size,
+                .attr = attr,
+            },
+            .color = .Red,
+        };
+
+        if (node.region.start < new_node.region.start) {
+            const new_left = try self.allocator.create(Node);
+            new_left.* = .{
+                .region = Region{
+                    .start = node.region.start,
+                    .end = new_node.region.start,
+                    .attr = .Free,
+                },
+            };
+            const new_right = try self.allocator.create(Node);
+            new_right.* = .{
+                .region = Region{
+                    .start = new_left.region.end,
+                    .end = node.region.end,
+                    .attr = .Free,
+                },
+                .color = .Red,
+            };
+            self.insert(new_left, node, .Left);
+            self.insert(new_right, node, .Right);
+            self.insert(new_node, new_right, .Left);
+        } else if (node.region.start == aligned_base) {
+            self.insert(new_node, node, .Left);
+        } else {
+            @panic("find_gap: invalid base");
+        }
+    }
+
+    fn find_exact_gap(self: *VmAllocator, node: ?*Node, base: u64, size: u64) ?*Node {
+        if (node == null) return null;
+        const n = node.?;
+
+        if (n.left != null) {
+            if (self.find_exact_gap(n.left, base, size)) |found| return found;
+        }
+
+        if (n.region.attr == .Free and n.left == null and n.right == null and
+            n.region.start <= base and n.region.end >= base + size)
+        {
+            return n;
+        }
+
+        if (n.right != null) {
+            if (self.find_exact_gap(n.right, base, size)) |found| return found;
+        }
+
+        return null;
+    }
+
+    pub fn allocate(self: *VmAllocator, size: u64, alignment: u64, attr: Attr) !u64 {
+        const node = self.find_gap(self.root, size, alignment) orelse return error.NoFreeMemory;
+    }
+
+    fn allocate_helper(self: *VmAllocator, node: ?*Node, size: u64, alignment: u64, attr: Attr) ?u64 {
+        if (node == null) return null;
+        const n = node.?;
+
+        if (n.left) |left| {
+            const aligned_base = std.mem.alignForward(u64, left.region.start, alignment);
+            const padding = aligned_base - left.region.start;
+
+            if (left.region.attr == .Free and left.region.size() >= size + padding) {
+                return aligned_base;
+            }
+
+            if (self.allocate_helper(left, size, alignment)) |found| return found;
+        }
+
+        if (n.region.attr == .Free and n.left == null and n.right == null) {
+            const aligned_base = std.mem.alignForward(u64, n.region.start, alignment);
+
+            if (n.region.end >= aligned_base + size) {
+                self.insert_null_child(n, aligned_base, aligned_base + size, attr);
+                return aligned_base;
+            }
+        }
+
+        if (n.right) |right| {
+            const aligned_base = std.mem.alignForward(u64, right.region.start, alignment);
+            const padding = aligned_base - right.region.start;
+
+            if (right.region.attr == .Free and right.region.size() >= size + padding) {
+                return aligned_base;
+            }
+
+            if (self.find_gap(right, size, alignment)) |found| return found;
+        }
+
+        return null;
+    }
+
+    fn insert_null_child(self: *VmAllocator, node: *Node, start: u64, end: u64, attr: Attr) void {
+        if (node.region.end == end) {
+            node.region.attr = attr;
+            return;
+        }
+
+        const new_node = try self.allocator.create(Node);
+        new_node.* = .{
+            .region = Region{
+                .start = start,
+                .end = end,
+                .attr = attr,
+            },
+            .color = .Red,
+        };
+
+        if (node.region.start < new_node.region.start) {
+            const new_left = try self.allocator.create(Node);
+            new_left.* = .{
+                .region = Region{
+                    .start = node.region.start,
+                    .end = new_node.region.end,
+                    .attr = .Free,
+                },
+            };
+
+            const new_right = try self.allocator.create(Node);
+            new_right.* = .{
+                .region = Region{
+                    .start = new_left.region.end,
+                    .end = node.region.end,
+                    .attr = .Free,
+                },
+                .color = .Red,
+            };
+            self.insert(new_left, node, .Left);
+            self.insert(new_right, node, .Right);
+            self.insert(new_node, new_right, .Left);
+        } else if (node.region.start == new_node.region.start) {
+            self.insert(new_node, node, .Left);
+        } else {
+            @panic("find_gap: invalid base");
+        }
     }
 
     pub fn insert(self: *VmAllocator, node: *Node, null_parent: ?*Node, dir: Dir) void {
@@ -275,12 +453,8 @@ const PAGE = 4096;
 
 const testing = std.testing;
 
-fn initAllocator() !VmAllocator {
-    return VmAllocator.init(std.testing.allocator, 0x100000, 64 * PAGE);
-}
-
 fn initTestAllocator() !VmAllocator {
-    return VmAllocator.initAllocator(testing.allocator, 1024 * 1024);
+    return VmAllocator.initAllocator(testing.allocator, 0, 1024 * 1024);
 }
 
 test "init creates black root" {
@@ -289,7 +463,7 @@ test "init creates black root" {
     defer testing.allocator.destroy(root);
     try testing.expect(vm.root != null);
     try testing.expect(vm.root.?.color == .Black);
-    try testing.expect(vm.root.?.region.size == 1024 * 1024);
+    try testing.expect(vm.root.?.region.size() == 1024 * 1024);
 }
 
 test "insert maintains red-black properties" {
@@ -300,14 +474,14 @@ test "insert maintains red-black properties" {
     const node1 = try vm.allocator.create(Node);
     defer vm.allocator.destroy(node1);
     node1.* = .{
-        .region = .{ .base = 100, .size = 100, .attr = .Free },
+        .region = .{ .start = 100, .end = 200, .attr = .Free },
         .color = .Red,
     };
 
     const node2 = try vm.allocator.create(Node);
     defer vm.allocator.destroy(node2);
     node2.* = .{
-        .region = .{ .base = 200, .size = 100, .attr = .Free },
+        .region = .{ .start = 200, .end = 300, .attr = .Free },
         .color = .Red,
     };
 
@@ -328,7 +502,7 @@ test "delete leaf node" {
     defer vm.deinit();
     const node = try vm.allocator.create(Node);
     node.* = .{
-        .region = .{ .base = 100, .size = 100, .attr = .Free },
+        .region = .{ .start = 100, .end = 200, .attr = .Free },
         .color = .Red,
     };
 
@@ -344,13 +518,13 @@ test "delete node with one child" {
     defer vm.deinit();
     const parent = try vm.allocator.create(Node);
     parent.* = .{
-        .region = .{ .base = 200, .size = 100, .attr = .Free },
+        .region = .{ .start = 200, .end = 300, .attr = .Free },
         .color = .Black,
     };
 
     const child = try vm.allocator.create(Node);
     child.* = .{
-        .region = .{ .base = 100, .size = 100, .attr = .Free },
+        .region = .{ .start = 100, .end = 200, .attr = .Free },
         .color = .Red,
     };
 
@@ -373,17 +547,17 @@ test "delete node with two children" {
     const right = try vm.allocator.create(Node);
 
     node.* = .{
-        .region = .{ .base = 200, .size = 100, .attr = .Free },
+        .region = .{ .start = 200, .end = 300, .attr = .Free },
         .color = .Black,
     };
 
     left.* = .{
-        .region = .{ .base = 100, .size = 100, .attr = .Free },
+        .region = .{ .start = 100, .end = 200, .attr = .Free },
         .color = .Red,
     };
 
     right.* = .{
-        .region = .{ .base = 300, .size = 100, .attr = .Free },
+        .region = .{ .start = 300, .end = 400, .attr = .Free },
         .color = .Red,
     };
 
@@ -391,13 +565,85 @@ test "delete node with two children" {
     vm.insert(left, node, .Left);
     vm.insert(right, node, .Right);
 
-    const original_base = node.region.base;
+    const original_base = node.region.start;
     const to_free = vm.delete(node);
     defer vm.allocator.destroy(to_free);
 
     try testing.expect(to_free == right); // The successor (right) should be the node we need to free
-    try testing.expect(original_base != node.region.base);
+    try testing.expect(original_base != node.region.start);
     try testing.expectEqual(node.left, left);
     try testing.expectEqual(left.parent, node);
     try testing.expectEqual(node.right, null);
+}
+
+test "basic allocation with exact match" {
+    var vm = try VmAllocator.initAllocator(testing.allocator, 0, 0x1000);
+    defer vm.deinit();
+
+    const addr = try vm.allocate(0x1000, 0x1000, .ReadWrite);
+    try testing.expectEqual(addr, 0);
+}
+
+test "basic allocation with alignment offset" {
+    var vm = try VmAllocator.initAllocator(testing.allocator, 0x1000, 0x2000);
+    defer vm.deinit();
+
+    const addr = try vm.allocate(1, 0x1000, .ReadWrite);
+    try testing.expectEqual(addr, 0x1000);
+}
+
+test "allocation fails with no space" {
+    var vm = try VmAllocator.initAllocator(testing.allocator, 0, 0x1000);
+    defer vm.deinit();
+
+    const result = vm.allocate(0x1001, 0x1000, .ReadWrite);
+    try testing.expectError(error.NoFreeMemory, result);
+}
+
+test "allocate_address: exact match" {
+    var vm = try VmAllocator.initAllocator(testing.allocator, 0x1000, 0x1000);
+    defer vm.deinit();
+
+    try vm.allocate_address(0x1000, 0x1000, .Read);
+    try testing.expectEqual(vm.root.?.left.?.region.start, 0x1000);
+    try testing.expectEqual(vm.root.?.left.?.region.size(), 0x1000);
+    try testing.expectEqual(vm.root.?.left.?.region.attr, .Read);
+}
+
+test "allocate_address: partial fit inside larger region" {
+    var vm = try VmAllocator.initAllocator(testing.allocator, 0x1000, 0x4000);
+    defer vm.deinit();
+
+    try vm.allocate_address(0x2000, 0x1000, .ReadWrite);
+    try testing.expectEqual(vm.root.?.right.?.left.?.region.start, 0x2000);
+    try testing.expectEqual(vm.root.?.right.?.left.?.region.size(), 0x1000);
+}
+
+test "allocate_address: fails when no matching region exists" {
+    var vm = try VmAllocator.initAllocator(testing.allocator, 0x1000, 0x1000);
+    defer vm.deinit();
+
+    try testing.expectError(error.NoFreeMemory, vm.allocate_address(0x2000, 0x1000, .ReadWrite));
+}
+
+test "allocate_address: fails when region is too small" {
+    var vm = try VmAllocator.initAllocator(testing.allocator, 0x1000, 0x800);
+    defer vm.deinit();
+
+    try testing.expectError(error.NoFreeMemory, vm.allocate_address(0x1000, 0x1000, .ReadWrite));
+}
+
+test "allocate fixed then dynamic" {
+    var vm = try VmAllocator.initAllocator(testing.allocator, 0x1000, 0x4000); // [0x1000–0x5000)
+    defer vm.deinit();
+
+    try vm.allocate_address(0x3000, 0x1000, .ReadWrite); // Manually reserve 0x3000–0x4000
+
+    const a = try vm.allocate(0x1000, 0x1000, .Read); // 0x1000
+    const b = try vm.allocate(0x1000, 0x1000, .Read); // 0x2000
+    const c = try vm.allocate(0x1000, 0x1000, .Read); // should skip 0x3000 (taken) → 0x4000
+
+    try testing.expectEqual(a, 0x1000);
+    try testing.expectEqual(b, 0x2000);
+    try testing.expectEqual(c, 0x4000);
 }
