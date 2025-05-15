@@ -237,14 +237,14 @@ pub const VmAllocator = struct {
             }
         }
 
-        self.insert_at(node, parent, dir);
+        node.parent = parent;
+        self.insert_at(node, dir);
     }
 
-    fn insert_at(self: *VmAllocator, node: *Node, null_parent: ?*Node, dir: Dir) void {
+    fn insert_at(self: *VmAllocator, node: *Node, dir: Dir) void {
         node.color = .Red;
-        node.parent = null_parent;
 
-        if (null_parent) |p| {
+        if (node.parent) |p| {
             p.node(dir).* = node;
         } else {
             self.root = node;
@@ -519,9 +519,9 @@ test "allocate around existing fixed regions" {
     try vm.allocate_address(0x2000, 0x1000, .ReadWrite); // Reserve [0x2000–0x3000)
     try vm.allocate_address(0x4000, 0x1000, .ReadWrite); // Reserve [0x4000–0x5000)
 
-    std.log.err("{}", .{vm});
-    std.log.err("{}", .{vm});
-    std.log.err("{}", .{vm});
+    const a = try vm.allocate(0x1000, 0x1000, .ReadWrite);
+    const b = try vm.allocate(0x1000, 0x1000, .ReadWrite);
+    const c = try vm.allocate(0x1000, 0x1000, .ReadWrite);
 
     try testing.expectEqual(0x1000, a);
     try testing.expectEqual(0x3000, b);
