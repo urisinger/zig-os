@@ -435,7 +435,7 @@ test "basic allocation with exact match" {
     var vm = VmAllocator.init(testing.allocator, 0, 0x1000);
     defer vm.deinit();
 
-    const addr = try vm.allocate(0x1000, 0x1000, .ReadWrite);
+    const addr = try vm.allocate(0x1000, 0x1000, .{ .permissions = .ReadWrite });
     try testing.expectEqual(addr, 0);
 }
 
@@ -443,7 +443,7 @@ test "basic allocation with alignment offset" {
     var vm = VmAllocator.init(testing.allocator, 0x1000, 0x2000);
     defer vm.deinit();
 
-    const addr = try vm.allocate(1, 0x1000, .ReadWrite);
+    const addr = try vm.allocate(1, 0x1000, .{ .permissions = .ReadWrite });
     try testing.expectEqual(addr, 0x1000);
 }
 
@@ -451,7 +451,7 @@ test "allocation fails with no space" {
     var vm = VmAllocator.init(testing.allocator, 0, 0x1000);
     defer vm.deinit();
 
-    const result = vm.allocate(0x1001, 0x1000, .ReadWrite);
+    const result = vm.allocate(0x1001, 0x1000, .{ .permissions = .ReadWrite });
     try testing.expectError(error.NoFreeMemory, result);
 }
 
@@ -459,17 +459,17 @@ test "allocate_address: exact match" {
     var vm = VmAllocator.init(testing.allocator, 0x1000, 0x1000);
     defer vm.deinit();
 
-    try vm.allocate_address(0x1000, 0x1000, .Read);
+    try vm.allocate_address(0x1000, 0x1000, .{ .permissions = .Read });
     try testing.expectEqual(vm.root.?.region.start, 0x1000);
     try testing.expectEqual(vm.root.?.region.size(), 0x1000);
-    try testing.expectEqual(vm.root.?.region.attr, .Read);
+    try testing.expectEqual(vm.root.?.region.attr, Attr{ .permissions = .Read });
 }
 
 test "allocate_address: partial fit inside larger region" {
     var vm = VmAllocator.init(testing.allocator, 0x1000, 0x4000);
     defer vm.deinit();
 
-    try vm.allocate_address(0x2000, 0x1000, .ReadWrite);
+    try vm.allocate_address(0x2000, 0x1000, .{ .permissions = .ReadWrite });
     try testing.expectEqual(vm.root.?.region.start, 0x2000);
     try testing.expectEqual(vm.root.?.region.size(), 0x1000);
 }
@@ -478,24 +478,24 @@ test "allocate_address: fails when no matching region exists" {
     var vm = VmAllocator.init(testing.allocator, 0x1000, 0x1000);
     defer vm.deinit();
 
-    try testing.expectError(error.InvalidAddress, vm.allocate_address(0x2000, 0x1000, .ReadWrite));
+    try testing.expectError(error.InvalidAddress, vm.allocate_address(0x2000, 0x1000, .{ .permissions = .ReadWrite }));
 }
 
 test "allocate_address: fails when region is too small" {
     var vm = VmAllocator.init(testing.allocator, 0x1000, 0x800);
     defer vm.deinit();
 
-    try testing.expectError(error.InvalidAddress, vm.allocate_address(0x1000, 0x1000, .ReadWrite));
+    try testing.expectError(error.InvalidAddress, vm.allocate_address(0x1000, 0x1000, .{ .permissions = .ReadWrite }));
 }
 
 test "allocate fixed then dynamic" {
     var vm = VmAllocator.init(testing.allocator, 0x1000, 0x4000); // [0x1000–0x5000)
     defer vm.deinit();
 
-    try vm.allocate_address(0x3000, 0x1000, .ReadWrite); // Manually reserve 0x3000–0x4000
-    const a = try vm.allocate(0x1000, 0x1000, .Read); // 0x1000
-    const b = try vm.allocate(0x1000, 0x1000, .Read); // 0x2000
-    const c = try vm.allocate(0x1000, 0x1000, .Read); // should skip 0x3000 (taken) → 0x4000
+    try vm.allocate_address(0x3000, 0x1000, .{ .permissions = .ReadWrite }); // Manually reserve 0x3000–0x4000
+    const a = try vm.allocate(0x1000, 0x1000, .{ .permissions = .Read }); // 0x1000
+    const b = try vm.allocate(0x1000, 0x1000, .{ .permissions = .Read }); // 0x2000
+    const c = try vm.allocate(0x1000, 0x1000, .{ .permissions = .Read }); // should skip 0x3000 (taken) → 0x4000
 
     try testing.expectEqual(0x1000, a);
     try testing.expectEqual(0x2000, b);
@@ -507,12 +507,12 @@ test "allocation with internal alignment gap" {
     defer vm.deinit();
 
     // Allocate 0x800 with 0x1000 alignment: first aligned base is 0x1000
-    const a = try vm.allocate(0x800, 0x1000, .Read);
+    const a = try vm.allocate(0x800, 0x1000, .{ .permissions = .Read });
 
     try testing.expectEqual(a, 0x1000);
 
     // Next allocation of 0x800 with 0x1000 alignment should land on 0x2000
-    const b = try vm.allocate(0x800, 0x1000, .Read);
+    const b = try vm.allocate(0x800, 0x1000, .{ .permissions = .Read });
 
     try testing.expectEqual(b, 0x2000);
 }
@@ -521,23 +521,23 @@ test "precise fills with aligned pages" {
     var vm = VmAllocator.init(testing.allocator, 0x0, 3 * PAGE);
     defer vm.deinit();
 
-    _ = try vm.allocate(PAGE, PAGE, .Read);
-    _ = try vm.allocate(PAGE, PAGE, .Read);
-    _ = try vm.allocate(PAGE, PAGE, .Read);
+    _ = try vm.allocate(PAGE, PAGE, .{ .permissions = .Read });
+    _ = try vm.allocate(PAGE, PAGE, .{ .permissions = .Read });
+    _ = try vm.allocate(PAGE, PAGE, .{ .permissions = .Read });
 
-    try testing.expectError(error.NoFreeMemory, vm.allocate(PAGE, PAGE, .Read));
+    try testing.expectError(error.NoFreeMemory, vm.allocate(PAGE, PAGE, .{ .permissions = .Read }));
 }
 
 test "allocate around existing fixed regions" {
     var vm = VmAllocator.init(testing.allocator, 0x1000, 0x5000); // [0x1000–0x6000)
     defer vm.deinit();
 
-    try vm.allocate_address(0x2000, 0x1000, .ReadWrite); // Reserve [0x2000–0x3000)
-    try vm.allocate_address(0x4000, 0x1000, .ReadWrite); // Reserve [0x4000–0x5000)
+    try vm.allocate_address(0x2000, 0x1000, .{ .permissions = .ReadWrite }); // Reserve [0x2000–0x3000)
+    try vm.allocate_address(0x4000, 0x1000, .{ .permissions = .ReadWrite }); // Reserve [0x4000–0x5000)
 
-    const a = try vm.allocate(0x1000, 0x1000, .ReadWrite);
-    const b = try vm.allocate(0x1000, 0x1000, .ReadWrite);
-    const c = try vm.allocate(0x1000, 0x1000, .ReadWrite);
+    const a = try vm.allocate(0x1000, 0x1000, .{ .permissions = .ReadWrite });
+    const b = try vm.allocate(0x1000, 0x1000, .{ .permissions = .ReadWrite });
+    const c = try vm.allocate(0x1000, 0x1000, .{ .permissions = .ReadWrite });
 
     try testing.expectEqual(0x1000, a);
     try testing.expectEqual(0x3000, b);
@@ -549,10 +549,10 @@ test "fragmented allocation fills range" {
     defer vm.deinit();
 
     // Fragmented allocations (out-of-order sizes)
-    const a = try vm.allocate(0x1000, 1, .Read); // 0x0000–0x1000
-    const b = try vm.allocate(0x800, 1, .Read); // 0x1000–0x1800
-    const c = try vm.allocate(0x800, 1, .Read); // 0x1800–0x2000
-    const d = try vm.allocate(0x1000, 1, .Read); // 0x2000–0x3000
+    const a = try vm.allocate(0x1000, 1, .{ .permissions = .Read }); // 0x0000–0x1000
+    const b = try vm.allocate(0x800, 1, .{ .permissions = .Read }); // 0x1000–0x1800
+    const c = try vm.allocate(0x800, 1, .{ .permissions = .Read }); // 0x1800–0x2000
+    const d = try vm.allocate(0x1000, 1, .{ .permissions = .Read }); // 0x2000–0x3000
 
     try testing.expectEqual(a, 0x0000);
     try testing.expectEqual(b, 0x1000);
@@ -560,5 +560,5 @@ test "fragmented allocation fills range" {
     try testing.expectEqual(d, 0x2000);
 
     // Should now be full
-    try testing.expectError(error.NoFreeMemory, vm.allocate(1, 1, .Read));
+    try testing.expectError(error.NoFreeMemory, vm.allocate(1, 1, .{ .permissions = .Read }));
 }

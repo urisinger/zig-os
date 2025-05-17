@@ -19,10 +19,10 @@ pub const Error = error{
     AddressNotInKernelSpace,
 
     // Allocator errors
-    OutOfBounds,
-    NoFreePages,
-    InvalidOperation,
-    AllocatorNotInitialized,
+    OutOfMemory,
+    InvalidSize,
+    InvalidAddress,
+    NotInitialized,
 };
 
 const KERNEL_VADDR_BASE: usize = 0xffff_8000_0000_0000;
@@ -115,24 +115,32 @@ pub fn mapAllMemory(pml4: *PageMapping) !void {
         var addr = aligned_start;
         while (addr < aligned_end) {
             const remaining = aligned_end - addr;
+            if (addr == 0xe0000000) {
+                std.log.info("Mapping memory at 0x{x} with size 0x{x}", .{ addr, remaining });
+            }
 
             if (addr % utils.LARGE_PAGE_SIZE == 0 and remaining >= utils.LARGE_PAGE_SIZE) {
-                try pml4.mmapLarge(@bitCast(globals.hhdm_offset + addr), addr, 1, .{
+                try pml4.mapPageLarge(@bitCast(globals.hhdm_offset + addr), addr, .{
                     .present = true,
                     .read_write = .read_write,
                     .cache_disable = true,
                 });
                 addr += utils.LARGE_PAGE_SIZE;
-            } else {
-                try pml4.mmap(@bitCast(globals.hhdm_offset + addr), addr, 1, .{
+            } else if (remaining >= utils.PAGE_SIZE) {
+                try pml4.mapPage(@bitCast(globals.hhdm_offset + addr), addr, .{
                     .present = true,
                     .read_write = .read_write,
                     .cache_disable = true,
                 });
                 addr += utils.PAGE_SIZE;
+            } else {
+                std.log.info("Skipping memory at 0x{x} with size 0x{x}", .{ addr, remaining });
+                break;
             }
         }
     }
+
+    std.log.info("Mapped all memory", .{});
 }
 
 pub fn mmap(vaddr: VirtualAddress, paddr: u64, num_pages: u64, flags: MmapFlags) !void {

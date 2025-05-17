@@ -12,6 +12,8 @@ const cpu = @import("../../cpu.zig");
 
 const Allocator = std.mem.Allocator;
 
+const slab = @import("slab.zig");
+
 pub fn init() void {
     pmm.init() catch @panic("failed to init pmm");
 
@@ -34,8 +36,6 @@ pub fn allocatePages(num_pages: usize) !u64 {
             phys_page,
             .{ .present = true, .user_supervisor = .supervisor, .read_write = .read_write },
         );
-
-        cpu.invlpg(vaddr);
     }
 
     return alloc_start;
@@ -101,7 +101,7 @@ fn remap(
 
     // Copy over the old contents
     const to_copy = @min(memory.len, new_len);
-    @memcpy(@as([*]u8,@ptrCast(new_ptr))[0..to_copy], memory[0..to_copy]);
+    @memcpy(@as([*]u8, @ptrCast(new_ptr))[0..to_copy], memory[0..to_copy]);
 
     // Free old memory
     free(undefined, memory, alignment, 0);

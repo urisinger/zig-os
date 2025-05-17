@@ -17,10 +17,10 @@ pub const Error = error{
     EntryNotPresent,
 
     // Allocator errors
-    OutOfBounds,
-    NoFreePages,
-    InvalidOperation,
-    AllocatorNotInitialized,
+    OutOfMemory,
+    InvalidSize,
+    InvalidAddress,
+    NotInitialized,
 };
 
 pub const ReadWrite = enum(u1) {
@@ -182,7 +182,6 @@ pub const PageMapping = extern struct {
             entry.user_supervisor = .user;
             entry.read_write = .read_write;
         }
-
         return @ptrFromInt(entry.get_addr() + globals.hhdm_offset);
     }
 
