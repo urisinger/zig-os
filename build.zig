@@ -49,7 +49,7 @@ pub fn build(b: *std.Build) !void {
 
     const user = b.addExecutable(.{
         .name = "user_elf",
-        .root_source_file = b.path("user_src/main.zig"),
+        .root_source_file = b.path("src/user/main.zig"),
         .target = target,
         .optimize = optimize,
         .code_model = .default,
@@ -58,7 +58,7 @@ pub fn build(b: *std.Build) !void {
     const limine = b.dependency("limine", .{});
     const kernel = b.addExecutable(.{
         .name = "kernel",
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/kernel/main.zig"),
         .target = target,
         .optimize = optimize,
         .code_model = code_model,
@@ -79,13 +79,13 @@ pub fn build(b: *std.Build) !void {
 
     const kernel_check = b.addExecutable(.{
         .name = "kernel",
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/kernel/main.zig"),
         .target = target,
         .optimize = optimize,
         .code_model = code_model,
     });
 
-    const user_check_module = b.createModule(.{ .root_source_file = b.path("src/main.zig") });
+    const user_check_module = b.createModule(.{ .root_source_file = b.path("src/user/main.zig") });
 
     kernel_check.setLinkerScript(linker_script_path);
 

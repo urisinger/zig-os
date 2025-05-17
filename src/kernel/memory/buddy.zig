@@ -3,7 +3,7 @@ const log = std.log.scoped(.buddy);
 const utils = @import("../utils.zig");
 
 /// Represents the minimum block size (4KB - page size)
-pub const MIN_BLOCK_SIZE = utils.PAGE_SIZE;
+pub const MIN_BLOCK_SIZE = 4096;
 const LOG_BLOCK_SIZE = std.math.log2_int(usize, MIN_BLOCK_SIZE);
 /// Maximum order of blocks (2^MAX_ORDER * MIN_BLOCK_SIZE = maximum block size)
 pub const MAX_ORDER = 10; // Supports up to 4MB blocks
@@ -16,7 +16,7 @@ pub const Error = error{
 };
 
 /// The BitmapBuddy allocator manages memory blocks of different sizes using a bitmap
-pub const BitmapBuddyAllocator = struct {
+pub const BuddyAllocator = struct {
     // Bitmap arrays for each order
     bitmaps: [MAX_ORDER + 1][]u32,
     // Number of pages available (total memory size / page size)
@@ -25,7 +25,7 @@ pub const BitmapBuddyAllocator = struct {
     max_order: usize,
 
     /// Initialize a new buddy allocator with the given memory region
-    pub fn init(bitmap_ptr: [*]u32, bitmap_size: usize, memory_size: usize) !BitmapBuddyAllocator {
+    pub fn init(bitmap_memory: []u32, memory_size: usize) !BuddyAllocator {
         if (memory_size < MIN_BLOCK_SIZE) {
             return Error.InvalidSize;
         }
@@ -36,7 +36,7 @@ pub const BitmapBuddyAllocator = struct {
         const max_order = getOrder(memory_size);
 
         // Initialize the allocator
-        var allocator = BitmapBuddyAllocator{
+        var allocator = BuddyAllocator{
             .bitmaps = undefined,
             .num_pages = num_pages,
             .max_order = max_order,
@@ -51,13 +51,13 @@ pub const BitmapBuddyAllocator = struct {
             // Calculate bitmap size in u32s
             const bitmap_u32s = (blocks_at_order + 31) / 32;
 
-            if ((bitmap_offset + bitmap_u32s) * 4 > bitmap_size) {
+            if ((bitmap_offset + bitmap_u32s) * 4 > bitmap_memory.len) {
                 log.err("Bitmap too small for allocator", .{});
                 return Error.OutOfMemory;
             }
 
             // Assign the bitmap
-            allocator.bitmaps[order] = bitmap_ptr[bitmap_offset .. bitmap_offset + bitmap_u32s];
+            allocator.bitmaps[order] = bitmap_memory[bitmap_offset .. bitmap_offset + bitmap_u32s];
             bitmap_offset += bitmap_u32s;
         }
 
@@ -123,7 +123,7 @@ pub const BitmapBuddyAllocator = struct {
     }
 
     /// Check if a block is available at a specific order
-    fn isBlockFree(self: *BitmapBuddyAllocator, order: usize, block_index: usize) bool {
+    fn isBlockFree(self: *BuddyAllocator, order: usize, block_index: usize) bool {
         if (order > self.max_order or block_index >= (self.num_pages >> @intCast(@min(order, 63)))) {
             return false;
         }
@@ -131,7 +131,7 @@ pub const BitmapBuddyAllocator = struct {
     }
 
     /// Mark a block as used
-    fn markBlockUsed(self: *BitmapBuddyAllocator, order: usize, block_index: usize) void {
+    fn markBlockUsed(self: *BuddyAllocator, order: usize, block_index: usize) void {
         if (order > self.max_order or block_index >= (self.num_pages >> @intCast(@min(order, 63)))) {
             return;
         }
@@ -139,7 +139,7 @@ pub const BitmapBuddyAllocator = struct {
     }
 
     /// Mark a block as free
-    fn markBlockFree(self: *BitmapBuddyAllocator, order: usize, block_index: usize) void {
+    fn markBlockFree(self: *BuddyAllocator, order: usize, block_index: usize) void {
         if (order > self.max_order or block_index >= (self.num_pages >> @intCast(@min(order, 63)))) {
             return;
         }
@@ -147,7 +147,7 @@ pub const BitmapBuddyAllocator = struct {
     }
 
     /// Find the first free block at a given order
-    fn findFreeBlock(self: *BitmapBuddyAllocator, order: usize) ?usize {
+    fn findFreeBlock(self: *BuddyAllocator, order: usize) ?usize {
         const bitmap = self.bitmaps[order];
 
         for (0..bitmap.len) |word_index| {
@@ -169,7 +169,7 @@ pub const BitmapBuddyAllocator = struct {
     }
 
     /// Allocate a block of the given order
-    pub fn allocateBlock(self: *BitmapBuddyAllocator, order: usize) ?usize {
+    pub fn allocateBlock(self: *BuddyAllocator, order: usize) ?usize {
         if (order > self.max_order) {
             return null;
         }
@@ -187,7 +187,6 @@ pub const BitmapBuddyAllocator = struct {
                 // Split the block
                 const child_index = parent_index * 2;
                 // Mark both children as free initially
-                self.markBlockFree(order, child_index);
                 self.markBlockFree(order, child_index + 1);
                 // Mark the first child as used and return it
                 self.markBlockUsed(order, child_index);
@@ -199,7 +198,7 @@ pub const BitmapBuddyAllocator = struct {
     }
 
     /// Try to merge buddy blocks recursively
-    fn tryMergeBlocks(self: *BitmapBuddyAllocator, order: usize, block_index: usize) void {
+    fn tryMergeBlocks(self: *BuddyAllocator, order: usize, block_index: usize) void {
         if (order >= self.max_order) {
             return;
         }
@@ -221,7 +220,7 @@ pub const BitmapBuddyAllocator = struct {
         }
     }
 
-    pub fn freeBlock(self: *BitmapBuddyAllocator, block_index: usize, order: usize) !void {
+    pub fn freeBlock(self: *BuddyAllocator, block_index: usize, order: usize) !void {
         self.markBlockFree(order, block_index);
 
         // Try to merge with buddy
@@ -229,7 +228,7 @@ pub const BitmapBuddyAllocator = struct {
     }
 
     /// Mark a memory region as allocated, even if it spans multiple blocks
-    pub fn markRegionAllocated(self: *BitmapBuddyAllocator, address: usize, end: usize) !void {
+    pub fn markRegionAllocated(self: *BuddyAllocator, address: usize, end: usize) !void {
         // Iterate over orders from largest to smallest
         var order: usize = self.max_order;
         while (order > 0) : (order -= 1) {
@@ -254,4 +253,76 @@ pub const BitmapBuddyAllocator = struct {
             }
         }
     }
+
+    pub fn printFreeBlocks(self: *BuddyAllocator) void {
+        var order: usize = 0;
+        while (order <= self.max_order) : (order += 1) {
+            std.log.err("Free blocks at order {d}:", .{order});
+            var block_index: usize = 0;
+            while (block_index < (self.num_pages >> @intCast(order))) : (block_index += 1) {
+                if (self.isBlockFree(order, block_index)) {
+                    std.log.err("0x{x}", .{block_index});
+                }
+            }
+        }
+    }
 };
+
+const expect = std.testing.expect;
+
+test "basic allocation and free" {
+    const total_size = 4096 * 32; // 128KB
+    const bitmap_size = BuddyAllocator.getBitmapSize(total_size);
+    const bitmap_buffer: []u32 = std.testing.allocator.alloc(u32, bitmap_size) catch unreachable;
+    defer std.testing.allocator.free(bitmap_buffer);
+    var allocator = try BuddyAllocator.init(bitmap_buffer, total_size);
+
+    const order0_block = allocator.allocateBlock(0).?;
+    try expect(allocator.isBlockFree(0, order0_block) == false);
+
+    allocator.printFreeBlocks();
+    try allocator.freeBlock(order0_block, 0);
+    allocator.printFreeBlocks();
+    try expect(allocator.isBlockFree(allocator.max_order, 0) == true);
+}
+
+test "exhaust all blocks at order 0" {
+    const total_size = 4096 * 16; // 64KB
+    const bitmap_size = BuddyAllocator.getBitmapSize(total_size);
+    const bitmap_buffer: []u32 = std.testing.allocator.alloc(u32, bitmap_size) catch unreachable;
+    defer std.testing.allocator.free(bitmap_buffer);
+    var allocator = try BuddyAllocator.init(bitmap_buffer, total_size);
+
+    const max_blocks = total_size / MIN_BLOCK_SIZE;
+    var blocks: [16]usize = undefined;
+    var i: usize = 0;
+
+    while (i < max_blocks) : (i += 1) {
+        const block_index = allocator.allocateBlock(0) orelse break;
+        blocks[i] = block_index;
+        try expect(allocator.isBlockFree(0, block_index) == false);
+    }
+
+    try expect(allocator.allocateBlock(0) == null);
+
+    try allocator.freeBlock(blocks[0], 0);
+    try expect(allocator.isBlockFree(0, blocks[0]) == true);
+}
+
+test "mark region allocated" {
+    const total_size = 4096 * 64; // 256KB
+    const bitmap_size = BuddyAllocator.getBitmapSize(total_size);
+    const bitmap_buffer: []u32 = std.testing.allocator.alloc(u32, bitmap_size) catch unreachable;
+    defer std.testing.allocator.free(bitmap_buffer);
+    var allocator = try BuddyAllocator.init(bitmap_buffer, total_size);
+
+    const region_start = 4096 * 4;
+    const region_end = 4096 * 8;
+    try allocator.markRegionAllocated(region_start, region_end);
+
+    var i: usize = region_start;
+    while (i < region_end) : (i += MIN_BLOCK_SIZE) {
+        const index = i / MIN_BLOCK_SIZE;
+        try expect(allocator.isBlockFree(0, index) == false);
+    }
+}

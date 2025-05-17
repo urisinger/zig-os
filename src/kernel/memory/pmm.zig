@@ -8,7 +8,7 @@ const limine = @import("limine");
 const globals = @import("../globals.zig");
 const boot = @import("../boot.zig");
 
-const BuddyAllocator = @import("buddy.zig").BitmapBuddyAllocator;
+const BuddyAllocator = @import("buddy.zig").BuddyAllocator;
 
 pub const Error = error{
     OutOfMemory,
@@ -98,7 +98,7 @@ pub fn init() !void {
     @memset(bitmap_vaddr[0..bitmap_bytes], 0);
 
     // Initialize buddy allocator
-    var buddy = try BuddyAllocator.init(@alignCast(@ptrCast(bitmap_vaddr)), bitmap_bytes, num_pages * utils.PAGE_SIZE);
+    var buddy = try BuddyAllocator.init(@as([*]u32, @alignCast(@ptrCast(bitmap_vaddr)))[0..bitmap_bytes], num_pages * utils.PAGE_SIZE);
 
     // Mark all unusable regions as allocated in the buddy allocator
     for (mem_map) |mem_entry| {
