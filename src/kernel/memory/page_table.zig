@@ -13,7 +13,6 @@ const cpu = @import("../cpu.zig");
 const framebuffer = @import("../display/framebuffer.zig");
 
 pub const Error = error{
-    PageAlreadyMapped,
     EntryNotPresent,
 
     // Allocator errors
@@ -120,9 +119,6 @@ pub const PageMapping = extern struct {
         for (0..num_pages) |page_index| {
             const current_vaddr: VirtualAddress = @bitCast(@as(u64, @bitCast(vaddr)) + @as(u64, page_index) * utils.LARGE_PAGE_SIZE);
 
-            if (@as(u64, @bitCast(current_vaddr)) == 0xffffffff8005a000) {
-                log.err("why is this addr in mmap", .{});
-            }
             const current_paddr = @as(u64, @bitCast(paddr)) + @as(u64, page_index) * utils.LARGE_PAGE_SIZE;
 
             try pml4.mapPageLarge(current_vaddr, current_paddr, flags);
@@ -140,10 +136,6 @@ pub const PageMapping = extern struct {
         const pt = try pd.getOrCreate(vaddr.pd_idx);
 
         const entry = &pt.mappings[vaddr.pt_idx];
-
-        if (entry.present) {
-            log.err("entry already present: 0x{x} with flags: ", .{@as(u64, @bitCast(vaddr))});
-        }
 
         entry.* = @bitCast(paddr);
         entry.* = entry.set_flags(flags);
@@ -214,7 +206,6 @@ pub const PageMapping = extern struct {
         const entry = pt.mappings[vaddr.pt_idx];
 
         if (!entry.present) {
-            // log.err("pt entery not present: {}", .{vaddr.pt_idx});
             return Error.EntryNotPresent;
         }
 

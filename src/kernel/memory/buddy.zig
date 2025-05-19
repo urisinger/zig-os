@@ -6,7 +6,7 @@ const utils = @import("../utils.zig");
 pub const MIN_BLOCK_SIZE = 4096;
 const LOG_BLOCK_SIZE = std.math.log2_int(usize, MIN_BLOCK_SIZE);
 /// Maximum order of blocks (2^MAX_ORDER * MIN_BLOCK_SIZE = maximum block size)
-pub const MAX_ORDER = 10; // Supports up to 4MB blocks
+pub const MAX_ORDER = 12; // Supports up to 4MB blocks
 
 pub const Error = error{
     OutOfMemory,
@@ -51,7 +51,7 @@ pub const BuddyAllocator = struct {
             // Calculate bitmap size in u32s
             const bitmap_u32s = (blocks_at_order + 31) / 32;
 
-            if ((bitmap_offset + bitmap_u32s) * 4 > bitmap_memory.len) {
+            if ((bitmap_offset + bitmap_u32s) > bitmap_memory.len) {
                 log.err("Bitmap too small for allocator", .{});
                 return Error.OutOfMemory;
             }
@@ -64,7 +64,7 @@ pub const BuddyAllocator = struct {
         // Initialize all blocks as free
         order = 0;
         while (order <= max_order) : (order += 1) {
-            // Set all bits to 1 (indicating free blocks)
+            // Set all bits to 0 (indicating free blocks)
             @memset(allocator.bitmaps[order], 0);
         }
 
@@ -89,7 +89,7 @@ pub const BuddyAllocator = struct {
             bitmap_offset += bitmap_u32s;
         }
 
-        return bitmap_offset * 4;
+        return bitmap_offset;
     }
 
     pub fn getOrder(size: usize) usize {
@@ -146,6 +146,38 @@ pub const BuddyAllocator = struct {
         setBit(self.bitmaps[order], block_index);
     }
 
+    pub fn allocateBlock(self: *BuddyAllocator, order: usize) ?usize {
+        var current_order = order;
+
+        // Find first free block at this order or higher
+        while (current_order <= self.max_order) : (current_order += 1) {
+            if (self.findFreeBlock(current_order)) |block_index| {
+                // Split blocks down to the target order
+                var index = block_index;
+
+                while (current_order > order) : (current_order -= 1) {
+                    // Split parent into two children
+                    const left_child = index * 2;
+                    const right_child = left_child + 1;
+
+                    // mark the current block as used
+                    self.markBlockUsed(current_order, index);
+                    // mark the right child as free
+                    self.markBlockFree(current_order - 1, right_child);
+
+                    index = left_child; // Always take the left child
+                }
+
+                self.markBlockUsed(order, index);
+
+                const address = index * (@as(usize, 1) << @intCast(order));
+                return address;
+            }
+        }
+
+        return null;
+    }
+
     /// Find the first free block at a given order
     fn findFreeBlock(self: *BuddyAllocator, order: usize) ?usize {
         const bitmap = self.bitmaps[order];
@@ -157,41 +189,7 @@ pub const BuddyAllocator = struct {
             const bit_index = @ctz(word);
             const block_index = word_index * 32 + bit_index;
 
-            // Check if this block is within bounds
-            if (block_index >= (self.num_pages >> @intCast(@min(order, 63)))) {
-                return null;
-            }
-
             return block_index;
-        }
-
-        return null;
-    }
-
-    /// Allocate a block of the given order
-    pub fn allocateBlock(self: *BuddyAllocator, order: usize) ?usize {
-        if (order > self.max_order) {
-            return null;
-        }
-
-        // Try to find a block at the requested order
-        if (self.findFreeBlock(order)) |block_index| {
-            self.markBlockUsed(order, block_index);
-            return block_index;
-        }
-
-        // If not found, try to split a larger block
-        var higher_order = order + 1;
-        while (higher_order <= self.max_order) : (higher_order += 1) {
-            if (self.allocateBlock(higher_order)) |parent_index| {
-                // Split the block
-                const child_index = parent_index * 2;
-                // Mark both children as free initially
-                self.markBlockFree(order, child_index + 1);
-                // Mark the first child as used and return it
-                self.markBlockUsed(order, child_index);
-                return child_index;
-            }
         }
 
         return null;
@@ -231,23 +229,55 @@ pub const BuddyAllocator = struct {
     pub fn markRegionAllocated(self: *BuddyAllocator, address: usize, end: usize) !void {
         // Iterate over orders from largest to smallest
         var order: usize = self.max_order;
-        while (order > 0) : (order -= 1) {
+        while (order >= 0) {
             const block_size = (@as(usize, 1) << @intCast(order)) * MIN_BLOCK_SIZE;
 
             var offset = std.mem.alignBackward(usize, address, block_size);
             const end_offset = std.mem.alignForward(usize, end, block_size);
 
             while (offset < end_offset) {
-                if (order == 0) {
-                    std.log.info("Marking block at 0x{x}", .{offset});
+                const block_index = offset / block_size;
+
+                if (block_index >= (self.num_pages >> @intCast(order))) {
+                    log.err("Invalid address: 0x{x} - 0x{x} - 0x{x} - order: {d}", .{ offset, end_offset, block_index, order });
+                    return Error.InvalidAddress;
                 }
+
+                if (order > 0 and self.isBlockFree(order, block_index)) {
+                    self.markBlockFree(order - 1, block_index * 2 + 1);
+                    self.markBlockFree(order - 1, block_index * 2);
+                }
+
+                self.markBlockUsed(order, block_index);
+
+                offset += block_size;
+            }
+
+            if (order == 0) {
+                break;
+            }
+            order -= 1;
+        }
+    }
+
+    /// Mark a memory region as free, even if it spans multiple blocks
+    pub fn markRegionFree(self: *BuddyAllocator, address: usize, end: usize) !void {
+        // Iterate over orders from smallest to largest
+        var order: usize = 0;
+        while (order <= self.max_order) : (order += 1) {
+            const block_size = (@as(usize, 1) << @intCast(order));
+
+            var offset = std.mem.alignBackward(usize, address, block_size);
+            const end_offset = std.mem.alignForward(usize, end, block_size);
+
+            while (offset < end_offset) {
                 const block_index = offset / block_size;
 
                 if (block_index >= (self.num_pages >> @intCast(order))) {
                     return Error.InvalidAddress;
                 }
 
-                self.markBlockUsed(order, block_index);
+                self.markBlockFree(order, block_index);
 
                 offset += block_size;
             }

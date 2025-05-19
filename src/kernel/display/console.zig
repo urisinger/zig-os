@@ -21,7 +21,7 @@ pub var console: ?Console = null;
 pub fn init() void {
     const fb = &framebuffer.framebuffer;
 
-    const size = fb.width * fb.height;
+    const size = (fb.pitch * fb.height) / (fb.bpp / 8);
     const allocator = std.heap.page_allocator;
     const pixels = allocator.alloc(Color, size) catch unreachable;
 

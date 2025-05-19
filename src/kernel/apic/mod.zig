@@ -3,9 +3,8 @@ const globals = @import("../globals.zig");
 const std = @import("std");
 const log = std.log.scoped(.apic);
 
-const vmm = @import("../memory/kernel/vmm.zig");
-
 const paging = @import("../memory/kernel/paging.zig");
+const pmm = @import("../memory/pmm.zig");
 
 const IA32_APIC_BASE = 0x1B;
 const APIC_BASE_MASK = 0xFFFFF000;
@@ -64,17 +63,24 @@ pub fn enableLocalApic() !void {
     var base = cpu.readMsr(IA32_APIC_BASE);
     base |= APIC_ENABLE_BIT;
     cpu.writeMsr(IA32_APIC_BASE, base);
-    const apic_page_addr = try vmm.allocatePage();
+    const apic_page_addr = (base & APIC_BASE_MASK) | APIC_BASE_TOP;
+    const apic_vaddr = apic_page_addr + globals.hhdm_offset;
 
-    try paging.mapPage(@bitCast(apic_page_addr), (base & APIC_BASE_MASK) | APIC_BASE_TOP, .{ .present = true, .read_write = .read_write, .cache_disable = true });
+    try paging.mapPage(@bitCast(apic_vaddr), apic_page_addr, .{
+        .present = true,
+        .read_write = .read_write,
+    });
 
-    apicBase = @ptrFromInt(apic_page_addr);
+    apicBase = @ptrFromInt(apic_vaddr);
 
-    const ioapic_page_addr = try vmm.allocatePage();
+    const io_apic_vaddr = IOAPIC_DEFAULT_ADDR + globals.hhdm_offset;
 
-    try paging.mapPage(@bitCast(ioapic_page_addr), IOAPIC_DEFAULT_ADDR, .{ .present = true, .read_write = .read_write, .cache_disable = true });
+    try paging.mapPage(@bitCast(io_apic_vaddr), IOAPIC_DEFAULT_ADDR, .{
+        .present = true,
+        .read_write = .read_write,
+    });
 
-    ioApicBase = @ptrFromInt(ioapic_page_addr);
+    ioApicBase = @ptrFromInt(io_apic_vaddr);
 }
 
 pub inline fn writeRegister(reg: u32, value: u32) void {

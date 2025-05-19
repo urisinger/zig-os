@@ -21,26 +21,26 @@ pub fn init() void {
 }
 
 fn registerExeptions() void {
-    registerInterrupt(0x0, exceptions.divisionError, .int, .user);
-    registerInterrupt(0x1, exceptions.debugException, .int, .user);
-    registerInterrupt(0x2, exceptions.nonMaskableInterrupt, .int, .user);
-    registerInterrupt(0x3, exceptions.breakpoint, .int, .user);
-    registerInterrupt(0x5, exceptions.boundRangeExceeded, .int, .user);
-    registerInterrupt(0x6, exceptions.invalidOpcode, .int, .user);
-    registerInterrupt(0x7, exceptions.deviceNotAvailable, .int, .user);
-    registerInterrupt(0x8, exceptions.doubleFault, .int, .user);
-    registerInterrupt(0x9, exceptions.coprocessorSegmentOverrun, .int, .user);
-    registerInterrupt(0xA, exceptions.invalidTSS, .int, .user);
-    registerInterrupt(0xB, exceptions.segmentNotPresent, .int, .user);
-    registerInterrupt(0xC, exceptions.stackSegmentFault, .int, .user);
-    registerInterrupt(0xD, exceptions.generalProtectionFault, .int, .user);
-    registerInterrupt(0xE, exceptions.pageFault, .int, .user);
-    registerInterrupt(0x10, exceptions.x87FloatingPoint, .int, .user);
-    registerInterrupt(0x11, exceptions.alignmentCheck, .int, .user);
-    registerInterrupt(0x12, exceptions.machineCheck, .int, .user);
-    registerInterrupt(0x13, exceptions.simdFloatingPoint, .int, .user);
-    registerInterrupt(0x14, exceptions.virtualizationException, .int, .user);
-    registerInterrupt(0x1E, exceptions.securityException, .int, .user);
+    registerInterrupt(0x0, exceptions.handleException, .int, .user);
+    registerInterrupt(0x1, exceptions.handleException, .int, .user);
+    registerInterrupt(0x2, exceptions.handleException, .int, .user);
+    registerInterrupt(0x3, exceptions.handleException, .int, .user);
+    registerInterrupt(0x5, exceptions.handleException, .int, .user);
+    registerInterrupt(0x6, exceptions.handleException, .int, .user);
+    registerInterrupt(0x7, exceptions.handleException, .int, .user);
+    registerInterrupt(0x8, exceptions.handleException, .int, .user);
+    registerInterrupt(0x9, exceptions.handleException, .int, .user);
+    registerInterrupt(0xA, exceptions.handleException, .int, .user);
+    registerInterrupt(0xB, exceptions.handleException, .int, .user);
+    registerInterrupt(0xC, exceptions.handleException, .int, .user);
+    registerInterrupt(0xD, exceptions.handleException, .int, .user);
+    registerInterrupt(0xE, exceptions.handleException, .int, .user);
+    registerInterrupt(0x10, exceptions.handleException, .int, .user);
+    registerInterrupt(0x11, exceptions.handleException, .int, .user);
+    registerInterrupt(0x12, exceptions.handleException, .int, .user);
+    registerInterrupt(0x13, exceptions.handleException, .int, .user);
+    registerInterrupt(0x14, exceptions.handleException, .int, .user);
+    registerInterrupt(0x1E, exceptions.handleException, .int, .user);
 
     registerInterrupt(0x20, irq.irq1, .int, .user);
 }
@@ -170,7 +170,7 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
                 cpu.swapgs_if_necessary();
 
                 asm volatile (push_error ++ push_num);
-                cpu.push_gpr();
+                cpu.pushGpr();
 
                 asm volatile (
                     \\ mov $0x10, %ax 
@@ -184,7 +184,7 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
                     \\ mov %ax, %es 
                 );
 
-                cpu.pop_gpr();
+                cpu.popGpr();
                 asm volatile ("add $16, %rsp");
 
                 cpu.swapgs_if_necessary();

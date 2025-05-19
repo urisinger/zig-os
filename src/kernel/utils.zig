@@ -1,7 +1,7 @@
 const std = @import("std");
-const log = std.log.scoped(.utils);
 const builtin = @import("builtin");
 const cpu = @import("cpu.zig");
+const root = @import("root");
 
 // 4kb
 pub const PAGE_SIZE = KB(4);
@@ -25,11 +25,17 @@ pub fn GB(gb: u64) u64 {
     return gb * BYTES_PER_GB;
 }
 
-pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, _: ?usize) noreturn {
-    log.err("KERNEL PANIC: {s}\n", .{msg});
+pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+    @branchHint(.cold);
+    const log = std.log.scoped(.panic);
 
-    if (error_return_trace) |trace| {
-        log.err("stacktrace: {}", .{trace.*});
-    }
+    const name =
+        if (@hasDecl(root, "name")) root.name else "<unknown>";
+    log.err("{s} panicked: {s}\nstack trace:", .{ name, msg });
+
     cpu.halt();
+    var iter = std.debug.StackIterator.init(@returnAddress(), @frameAddress());
+    while (iter.next()) |addr| {
+        log.err("  0x{x}", .{addr});
+    }
 }

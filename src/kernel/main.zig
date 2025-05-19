@@ -6,7 +6,7 @@ const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false, .page_size
 const logger = @import("logger.zig");
 
 const utils = @import("utils.zig");
-pub const panic = utils.panic;
+pub const panic = logger.panic;
 
 const boot = @import("boot.zig");
 
@@ -59,11 +59,12 @@ export fn _start() callconv(.C) noreturn {
     boot.init();
 
     gdt.init();
-    core.init();
 
     idt.init();
 
     kheap.init();
+
+    core.init();
     console.init();
 
     apic.configureLocalApic() catch @panic("failed to init apic");
@@ -80,6 +81,6 @@ export fn _start() callconv(.C) noreturn {
     const allocator = core.context().gpa.allocator();
 
     scheduler.insertTask(allocator, elf.elfTask(&elf_code, allocator) catch unreachable, "task_1") catch unreachable;
-    scheduler.start();
-    cpu.halt();
+
+    @panic("dont like nigga");
 }

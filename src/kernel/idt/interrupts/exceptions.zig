@@ -1,101 +1,68 @@
 const std = @import("std");
 const log = std.log.scoped(.exeptions);
 const idt = @import("../idt.zig");
+const cpu = @import("../../cpu.zig");
 
-pub fn divisionError(ctx: *volatile idt.Context) void {
+const exception_names: [32]?[]const u8 = [_]?[]const u8{
+    "Division Error",
+    "Debug Exception",
+    "Non-Maskable Interrupt",
+    "Breakpoint",
+    null, // 0x4 is reserved
+    "Bound Range Exceeded",
+    "Invalid Opcode",
+    "Device Not Available",
+    "Double Fault",
+    "Coprocessor Segment Overrun",
+    "Invalid TSS",
+    "Segment Not Present",
+    "Stack Segment Fault",
+    "General Protection Fault",
+    "Page Fault",
+    null, // 0xF is reserved
+    "x87 Floating Point Exception",
+    "Alignment Check",
+    "Machine Check",
+    "SIMD Floating Point Exception",
+    "Virtualization Exception",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "Security Exception", // 0x1E
+    null,
+};
+
+pub fn handleException(ctx: *volatile idt.Context) void {
+    const interrupt_num = ctx.interrupt_num;
+    const name = if (interrupt_num < exception_names.len and exception_names[interrupt_num] != null)
+        exception_names[interrupt_num].?
+    else
+        "Unknown Exception";
+
+    if (interrupt_num == 0x6) {
+        const ip = ctx.ret_frame.rip;
+        const opcode_ptr: [*]const u8 = @ptrFromInt(ip);
+        const opcode0 = opcode_ptr[0];
+        const opcode1 = opcode_ptr[1];
+        const opcode2 = opcode_ptr[2];
+        log.err("Invalid opcode at RIP=0x{x}: 0x{x} 0x{x} 0x{x}", .{
+            ip,
+            opcode0,
+            opcode1,
+            opcode2,
+        });
+    }
+
     dumpRegisters(@volatileCast(ctx));
-    @panic("Unhandled division error.");
-}
-
-pub fn debugException(_: *volatile idt.Context) void {
-    @panic("Unhandled debug exception.");
-}
-
-pub fn nonMaskableInterrupt(_: *volatile idt.Context) void {
-    @panic("Unhandled non-maskable interrupt.");
-}
-
-pub fn breakpoint(_: *volatile idt.Context) void {
-    @panic("Unhandled breakpoint exception.");
-}
-
-pub fn boundRangeExceeded(_: *volatile idt.Context) void {
-    @panic("Unhandled bound range exceeded.");
-}
-
-pub fn invalidOpcode(ctx: *volatile idt.Context) void {
-    const ip = ctx.ret_frame.rip;
-    const opcode_ptr: [*]const u8 = @ptrFromInt(ip);
-
-    // Read a few bytes from the faulting instruction pointer
-    const opcode0 = opcode_ptr[0];
-    const opcode1 = opcode_ptr[1];
-    const opcode2 = opcode_ptr[2];
-
-    log.err("Invalid opcode at RIP=0x{x}: 0x{x} 0x{x} 0x{x}", .{
-        ip,
-        opcode0,
-        opcode1,
-        opcode2,
-    });
-
-    @panic("Unhandled invalid opcode.");
-}
-
-pub fn deviceNotAvailable(_: *volatile idt.Context) void {
-    @panic("Unhandled device not available.");
-}
-
-pub fn doubleFault(_: *volatile idt.Context) void {
-    @panic("Unhandled double fault.");
-}
-
-pub fn coprocessorSegmentOverrun(_: *volatile idt.Context) void {
-    @panic("Unhandled coprocessor segment overrun.");
-}
-
-pub fn invalidTSS(_: *volatile idt.Context) void {
-    @panic("Unhandled invalid TSS.");
-}
-
-pub fn segmentNotPresent(_: *volatile idt.Context) void {
-    @panic("Unhandled segment not present.");
-}
-
-pub fn stackSegmentFault(_: *volatile idt.Context) void {
-    @panic("Unhandled stack segment fault.");
-}
-
-pub fn generalProtectionFault(_: *volatile idt.Context) void {
-    @panic("Unhandled general protection fault.");
-}
-
-pub fn pageFault(_: *volatile idt.Context) void {
-    @panic("Unhandled page fault.");
-}
-
-pub fn x87FloatingPoint(_: *volatile idt.Context) void {
-    @panic("Unhandled x87 floating point exception.");
-}
-
-pub fn alignmentCheck(_: *volatile idt.Context) void {
-    @panic("Unhandled alignment check.");
-}
-
-pub fn machineCheck(_: *volatile idt.Context) void {
-    @panic("Unhandled machine check.");
-}
-
-pub fn simdFloatingPoint(_: *volatile idt.Context) void {
-    @panic("Unhandled SIMD floating point exception.");
-}
-
-pub fn virtualizationException(_: *volatile idt.Context) void {
-    @panic("Unhandled virtualization exception.");
-}
-
-pub fn securityException(_: *volatile idt.Context) void {
-    @panic("Unhandled security exception.");
+    log.err("Unhandled Exception {} (0x{x}): {s}", .{ interrupt_num, interrupt_num, name });
+    log.err("CPU exception occurred.", .{});
+    cpu.halt();
 }
 
 pub fn dumpRegisters(ctx: *const idt.Context) void {

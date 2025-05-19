@@ -2,7 +2,6 @@ const std = @import("std");
 const log = std.log.scoped(.kheap);
 const paging = @import("paging.zig");
 const pmm = @import("../pmm.zig");
-const vmm = @import("vmm.zig");
 
 const utils = @import("../../utils.zig");
 const globals = @import("../../globals.zig");
@@ -21,38 +20,19 @@ pub fn init() void {
         log.err("paging.init error: {}", .{err});
         @panic("failed to init paging {}");
     };
-
-    vmm.init() catch @panic("failed to init vmm");
 }
 
-pub fn allocatePages(num_pages: usize) !u64 {
-    const alloc_start = try vmm.allocatePageBlock(num_pages);
+pub fn allocatePages(num_pages: usize) !usize {
+    const order = std.math.log2_int_ceil(usize, num_pages);
 
-    for (0..num_pages) |i| {
-        const vaddr = alloc_start + i * utils.PAGE_SIZE;
-        const phys_page = try pmm.allocatePage();
-        try paging.mapPage(
-            @bitCast(vaddr),
-            phys_page,
-            .{ .present = true, .user_supervisor = .supervisor, .read_write = .read_write },
-        );
-    }
+    const alloc_start = try pmm.allocatePageBlock(order);
 
-    return alloc_start;
+    return alloc_start + globals.hhdm_offset;
 }
 
 pub fn freePages(start_addr: usize, num_pages: usize) !void {
-    for (0..num_pages) |page_index| {
-        const page_vaddr = start_addr + page_index * utils.PAGE_SIZE;
-        const phys_addr = paging.getPaddr(@bitCast(page_vaddr)) catch unreachable;
-
-        try paging.unmapPage(@bitCast(start_addr + page_index * utils.PAGE_SIZE));
-        try pmm.freePage(phys_addr);
-
-        cpu.invlpg(page_vaddr);
-    }
-
-    try vmm.freePageBlock(start_addr, num_pages);
+    const order = std.math.log2_int_ceil(usize, num_pages);
+    try pmm.freePageBlock(start_addr - globals.hhdm_offset, order);
 }
 
 pub const vtable = Allocator.VTable{

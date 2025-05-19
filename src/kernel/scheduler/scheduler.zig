@@ -67,6 +67,7 @@ fn nextTask() *idt.Context {
 
 pub fn insertTask(allocator: std.mem.Allocator, task: *Task, name: []const u8) !void {
     const new_task = try allocator.create(TaskQueueEntry);
+
     new_task.task = task;
     new_task.name = name;
 
@@ -99,7 +100,7 @@ pub export fn start() noreturn {
 
     const frame = &context.ret_frame;
 
-    log.info("starting kernel", .{});
+    log.info("starting scheduler", .{});
     asm volatile (
         \\ swapgs
         \\ xchg %bx, %bx

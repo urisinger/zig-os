@@ -13,6 +13,8 @@ pub export var hhdm_request: limine.HhdmRequest = .{};
 
 export var kernel_address_request: limine.KernelAddressRequest = .{};
 
+pub export var kernel_file: limine.KernelFileRequest = .{};
+
 // These are tempory variables, that wont last when we finish booting
 pub const BootParams = struct {
     kernel_base_physical: u64,

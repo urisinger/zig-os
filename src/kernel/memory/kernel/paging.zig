@@ -104,38 +104,68 @@ pub fn init() Error!void {
 pub fn mapAllMemory(pml4: *PageMapping) !void {
     const mem_map = boot.params.?.memory_map;
 
-    // Calculate total memory and map each region
-    for (mem_map) |mem_entry| {
-        const phys_start = mem_entry.base;
-        const phys_end = mem_entry.base + mem_entry.length;
+    // First map entire usable range
+    {
+        var max_mem: u64 = 0;
 
-        const aligned_start = std.mem.alignBackward(u64, phys_start, utils.PAGE_SIZE);
-        const aligned_end = std.mem.alignForward(u64, phys_end, utils.PAGE_SIZE);
-
-        var addr = aligned_start;
-        while (addr < aligned_end) {
-            const remaining = aligned_end - addr;
-            if (addr == 0xe0000000) {
-                std.log.info("Mapping memory at 0x{x} with size 0x{x}", .{ addr, remaining });
+        for (mem_map) |mem_entry| {
+            if (mem_entry.type != .usable) {
+                continue;
             }
+
+            const end_addr = std.mem.alignForward(u64, mem_entry.base + mem_entry.length, utils.PAGE_SIZE);
+            max_mem = @max(max_mem, end_addr);
+        }
+
+        var addr: u64 = 0;
+
+        while (addr < max_mem) {
+            const remaining = max_mem - addr;
 
             if (addr % utils.LARGE_PAGE_SIZE == 0 and remaining >= utils.LARGE_PAGE_SIZE) {
                 try pml4.mapPageLarge(@bitCast(globals.hhdm_offset + addr), addr, .{
                     .present = true,
                     .read_write = .read_write,
-                    .cache_disable = true,
                 });
                 addr += utils.LARGE_PAGE_SIZE;
             } else if (remaining >= utils.PAGE_SIZE) {
                 try pml4.mapPage(@bitCast(globals.hhdm_offset + addr), addr, .{
                     .present = true,
                     .read_write = .read_write,
-                    .cache_disable = true,
                 });
                 addr += utils.PAGE_SIZE;
-            } else {
-                std.log.info("Skipping memory at 0x{x} with size 0x{x}", .{ addr, remaining });
-                break;
+            }
+        }
+    }
+
+    // Calculate total memory and map each region
+    for (mem_map) |mem_entry| {
+        if (mem_entry.type == .framebuffer) {
+            const phys_start = mem_entry.base;
+            const phys_end = mem_entry.base + mem_entry.length;
+
+            const aligned_start = std.mem.alignBackward(u64, phys_start, utils.PAGE_SIZE);
+            const aligned_end = std.mem.alignForward(u64, phys_end, utils.PAGE_SIZE);
+
+            var addr = aligned_start;
+            while (addr < aligned_end) {
+                const remaining = aligned_end - addr;
+
+                if (addr % utils.LARGE_PAGE_SIZE == 0 and remaining >= utils.LARGE_PAGE_SIZE) {
+                    try pml4.mapPageLarge(@bitCast(globals.hhdm_offset + addr), addr, .{
+                        .present = true,
+                        .read_write = .read_write,
+                        .cache_disable = true,
+                    });
+                    addr += utils.LARGE_PAGE_SIZE;
+                } else if (remaining >= utils.PAGE_SIZE) {
+                    try pml4.mapPage(@bitCast(globals.hhdm_offset + addr), addr, .{
+                        .present = true,
+                        .read_write = .read_write,
+                        .cache_disable = true,
+                    });
+                    addr += utils.PAGE_SIZE;
+                }
             }
         }
     }
