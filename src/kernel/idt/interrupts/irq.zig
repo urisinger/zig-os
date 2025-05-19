@@ -17,5 +17,6 @@ pub fn irq1(_: *volatile idt.Context) void {
     if (keyboard_state.handleScancode(scancode)) |key| {
         log.info("Key event: {}", .{key});
     }
-    apic.sendEoi();
+
+    @panic("dont like nigga");
 }

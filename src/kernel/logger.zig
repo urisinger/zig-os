@@ -56,10 +56,7 @@ pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
 
     var iter = std.debug.StackIterator.init(@returnAddress(), @frameAddress());
     if (getSelfDwarf()) |_dwarf| {
-        const gpa = core.context().gpa.allocator();
-
         var dwarf = _dwarf;
-        defer dwarf.deinit(gpa);
 
         while (iter.next()) |r_addr| {
             printSourceAtAddress(panic_printer, &dwarf, r_addr) catch {};
@@ -100,43 +97,62 @@ fn printSourceAtAddress(writer: anytype, debug_info: *std.debug.Dwarf, address: 
         try std.fmt.format(writer, "\x1B[90m0x{x}\x1B[0m\n", .{address});
         return;
     };
-    defer if (sym.source_location) |loc| std.heap.page_allocator.free(loc.file_name);
-
-    try std.fmt.format(writer, "\x1B[1m", .{});
-
-    if (sym.source_location) |*sl| {
-        try std.fmt.format(
-            writer,
-            "{s}:{d}:{d}",
-            .{ sl.file_name, sl.line, sl.column },
-        );
-    } else {
-        try std.fmt.format(writer, "???:?:?", .{});
-    }
-
-    try std.fmt.format(
-        writer,
-        "\x1B[0m: \x1B[90m0x{x} in {s} ({s})\x1B[0m\n",
-        .{ address, sym.name, sym.compile_unit_name },
-    );
+    defer if (sym.source_location) |loc| gpa.free(loc.file_name);
 
     // std.debug.printSourceAtAddress(debug_info: *SelfInfo, out_stream: anytype, address: usize, tty_config: io.tty.Config)
 
-    const loc = sym.source_location orelse return;
-    const source_file = findSourceFile(loc.file_name) orelse return;
+    const tty_config = std.io.tty.Config.escape_codes;
 
-    var source_line: []const u8 = "<out-of-bounds>";
-    var lines_iter = std.mem.splitScalar(u8, source_file.contents, '\n');
-    for (0..loc.line) |_| {
-        source_line = lines_iter.next() orelse "<out-of-bounds>";
+    printLineInfo(writer, sym.source_location, address, sym.name, sym.compile_unit_name, tty_config) catch {};
+}
+
+fn printLineInfo(
+    out_stream: anytype,
+    source_location: ?std.debug.SourceLocation,
+    address: usize,
+    symbol_name: []const u8,
+    compile_unit_name: []const u8,
+    tty_config: std.io.tty.Config,
+) !void {
+    nosuspend {
+        try tty_config.setColor(out_stream, .bold);
+
+        if (source_location) |*sl| {
+            try out_stream.print("{s}:{d}:{d}", .{ sl.file_name, sl.line, sl.column });
+        } else {
+            try out_stream.writeAll("???:?:?");
+        }
+
+        try tty_config.setColor(out_stream, .reset);
+        try out_stream.writeAll(": ");
+        try tty_config.setColor(out_stream, .dim);
+        try out_stream.print("0x{x} in {s} ({s})", .{ address, symbol_name, compile_unit_name });
+        try tty_config.setColor(out_stream, .reset);
+        try out_stream.writeAll("\n");
+
+        // Show the matching source code line if possible
+        if (source_location) |sl| {
+            var source_line: []const u8 = "<out-of-bounds>";
+
+            const source_file = findSourceFile(sl.file_name) orelse return;
+            var lines_iter = std.mem.splitScalar(u8, source_file.contents, '\n');
+            for (0..sl.line) |_| {
+                source_line = lines_iter.next() orelse "<out-of-bounds>";
+            }
+
+            try std.fmt.format(out_stream, "{s}\n", .{source_line});
+            if (sl.column > 0) {
+                // The caret already takes one char
+                const space_needed = @as(usize, @intCast(sl.column - 1));
+
+                try out_stream.writeByteNTimes(' ', space_needed);
+                try tty_config.setColor(out_stream, .green);
+                try out_stream.writeAll("^");
+                try tty_config.setColor(out_stream, .reset);
+            }
+            try out_stream.writeAll("\n");
+        }
     }
-
-    try std.fmt.format(writer, "{s}\n", .{source_line});
-
-    const space_needed = @as(usize, @intCast(loc.column - 1));
-
-    try writer.writeBytesNTimes(" ", space_needed);
-    try writer.writeAll("\x1B[92m^\x1B[0m\n");
 }
 
 fn findSourceFile(path: []const u8) ?SourceFile {
@@ -198,6 +214,8 @@ const source_files: []const SourceFile = &.{
     .open("serial.zig"),
     .open("display/console.zig"),
     .open("conf.zig"),
+    .open("idt/interrupts/exceptions.zig"),
+    .open("idt/interrupts/irq.zig"),
 };
 
 fn getSelfDwarf() !std.debug.Dwarf {
@@ -205,12 +223,10 @@ fn getSelfDwarf() !std.debug.Dwarf {
 
     const gpa = core.context().gpa.allocator();
 
-    // std.debug.captureStackTrace(first_address: ?usize, stack_trace: *std.builtin.StackTrace)
+    //std.debug.captureStackTrace(first_address: ?usize, stack_trace: *std.builtin.StackTrace)
 
     const kernel_file = @import("boot.zig").kernel_file.response orelse return error.NoKernelFile;
-    const addr: [*]u8 = @ptrCast(kernel_file.kernel_file.address);
-    const size = kernel_file.kernel_file.size;
-    const elf_bin = addr[0..size];
+    const elf_bin = kernel_file.kernel_file.data();
     var elf = std.io.fixedBufferStream(elf_bin);
 
     const header = try std.elf.Header.read(&elf);

@@ -3,7 +3,7 @@ const cpu = @import("cpu.zig");
 
 const std = @import("std");
 
-const Gpa = std.heap.ArenaAllocator;
+const Gpa = std.heap.DebugAllocator(.{ .backing_allocator_zeroes = false, .thread_safe = false });
 
 const CoreContext = struct {
     self: *CoreContext,
@@ -27,7 +27,7 @@ var cpu_0_context: CoreContext = undefined;
 
 pub fn init() void {
     cpu_0_context.self = &cpu_0_context;
-    cpu_0_context.gpa = Gpa.init(std.heap.page_allocator);
+    cpu_0_context.gpa = Gpa{};
 
     const core_ptr = @intFromPtr(&cpu_0_context);
     cpu.writeMsr(MSR_KERNEL_GS_BASE, core_ptr);

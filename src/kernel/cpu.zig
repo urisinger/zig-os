@@ -13,6 +13,7 @@ pub inline fn setCr3(pml4: u64) void {
 }
 
 pub inline fn halt() noreturn {
+    cli();
     while (true) {
         asm volatile ("hlt");
     }

@@ -72,7 +72,7 @@ run-hdd-bios: $(IMAGE_NAME).hdd
 
 .PHONY: debug-x86_64
 debug-x86_64: ovmf $(IMAGE_NAME).iso
-	qemu-system-x86_64 -M q35 -m 2G -bios ovmf-x86_64/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -S -s 
+	qemu-system-x86_64 -M q35 -m 2G -bios ovmf-x86_64/OVMF.fd -cdrom $(IMAGE_NAME).iso -boot d -serial stdio -S -s -d int
 
 .PHONY: debug-hdd-x86_64
 debug-hdd-x86_64: ovmf $(IMAGE_NAME).hdd

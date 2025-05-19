@@ -1,6 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.slab);
 const kheap = @import("heap.zig");
+const pmm = @import("../pmm.zig");
 const utils = @import("../../utils.zig");
 
 var slab_cache: ?*SlabCache = null;
@@ -188,9 +189,12 @@ pub const SlabCache = struct {
             utils.PAGE_SIZE,
         );
 
+        // Calculate the best order for allocation
         const pages_needed = (slab_size + utils.PAGE_SIZE - 1) / utils.PAGE_SIZE;
+        const order = pmm.getOrder(pages_needed);
 
-        const memory_addr = try kheap.allocatePages(pages_needed);
+        // Allocate memory using the buddy allocator
+        const memory_addr = try pmm.allocatePageBlock(order);
         const memory = @as([*]u8, @ptrFromInt(memory_addr))[0..slab_size];
 
         const new_slab = try Slab.init(memory, self.obj_size);
@@ -269,7 +273,8 @@ pub const SlabCache = struct {
             while (current) |slab| {
                 const next = slab.next;
                 const pages = (slab.memory.len + utils.PAGE_SIZE - 1) / utils.PAGE_SIZE;
-                kheap.freePages(@intFromPtr(slab.memory.ptr), pages) catch {};
+                const order = pmm.getOrder(pages);
+                pmm.freePageBlock(@intFromPtr(slab.memory.ptr), order) catch {};
                 allocator.destroy(slab);
                 current = next;
             }

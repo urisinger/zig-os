@@ -26,7 +26,7 @@ pub var params: ?BootParams = null;
 
 pub fn init() void {
     const mem_map_response = memory_map_request.response.?;
-    const mem_map = mem_map_response.getEntries();
+    const mem_map = mem_map_response.entries();
 
     params = BootParams{
         .memory_map = mem_map,

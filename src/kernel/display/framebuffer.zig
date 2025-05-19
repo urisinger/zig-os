@@ -9,7 +9,7 @@ pub var framebuffer: Framebuffer = undefined;
 //Make sure this cant panic or display logs
 pub fn init() void {
     const response = framebuffer_request.response.?;
-    const limine_framebuffer = response.getFramebuffers()[0];
+    const limine_framebuffer = response.framebuffers()[0];
     framebuffer = .{
         .address = @ptrCast(limine_framebuffer.address),
         .width = limine_framebuffer.width,

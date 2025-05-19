@@ -109,7 +109,7 @@ pub fn mapAllMemory(pml4: *PageMapping) !void {
         var max_mem: u64 = 0;
 
         for (mem_map) |mem_entry| {
-            if (mem_entry.type != .usable) {
+            if (mem_entry.kind != .usable) {
                 continue;
             }
 
@@ -140,7 +140,7 @@ pub fn mapAllMemory(pml4: *PageMapping) !void {
 
     // Calculate total memory and map each region
     for (mem_map) |mem_entry| {
-        if (mem_entry.type == .framebuffer) {
+        if (mem_entry.kind == .framebuffer) {
             const phys_start = mem_entry.base;
             const phys_end = mem_entry.base + mem_entry.length;
 

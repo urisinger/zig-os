@@ -65,7 +65,7 @@ pub fn init() !void {
     var max_addr: u64 = 0;
 
     for (mem_map) |mem_entry| {
-        if (mem_entry.type != .usable) {
+        if (mem_entry.kind != .usable) {
             continue;
         }
 
@@ -89,7 +89,7 @@ pub fn init() !void {
     // Find a memory region to place the bitmap
     var bitmap_page: u64 = 0;
     for (mem_map) |mem_entry| {
-        if (mem_entry.type == .usable and std.math.divCeil(u64, mem_entry.length, utils.PAGE_SIZE) catch unreachable > bitmap_num_pages) {
+        if (mem_entry.kind == .usable and std.math.divCeil(u64, mem_entry.length, utils.PAGE_SIZE) catch unreachable > bitmap_num_pages) {
             bitmap_page = @divExact(mem_entry.base, utils.PAGE_SIZE);
             break;
         }
@@ -102,7 +102,7 @@ pub fn init() !void {
 
     // Mark all unusable regions as allocated in the buddy allocator
     for (mem_map) |mem_entry| {
-        if (mem_entry.type != .usable) {
+        if (mem_entry.kind != .usable) {
             if (mem_entry.base + mem_entry.length > max_addr) {
                 continue;
             }

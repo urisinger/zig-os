@@ -13,6 +13,7 @@ pub const Error = error{
     InvalidSize,
     InvalidAddress,
     NotInitialized,
+    InvalidBlockState,
 };
 
 /// The BitmapBuddy allocator manages memory blocks of different sizes using a bitmap
@@ -63,7 +64,7 @@ pub const BuddyAllocator = struct {
 
         // Initialize all blocks as free
         order = 0;
-        while (order <= max_order) : (order += 1) {
+        while (order < max_order) : (order += 1) {
             // Set all bits to 0 (indicating free blocks)
             @memset(allocator.bitmaps[order], 0);
         }
@@ -228,35 +229,26 @@ pub const BuddyAllocator = struct {
     /// Mark a memory region as allocated, even if it spans multiple blocks
     pub fn markRegionAllocated(self: *BuddyAllocator, address: usize, end: usize) !void {
         // Iterate over orders from largest to smallest
-        var order: usize = self.max_order;
-        while (order >= 0) {
+        var order: usize = self.max_order + 1;
+        while (order > 0) {
+            order -= 1;
             const block_size = (@as(usize, 1) << @intCast(order)) * MIN_BLOCK_SIZE;
 
             var offset = std.mem.alignBackward(usize, address, block_size);
-            const end_offset = std.mem.alignForward(usize, end, block_size);
+            const aligned_end = std.mem.alignForward(usize, end, block_size);
 
-            while (offset < end_offset) {
+            while (offset < aligned_end) {
                 const block_index = offset / block_size;
 
-                if (block_index >= (self.num_pages >> @intCast(order))) {
-                    log.err("Invalid address: 0x{x} - 0x{x} - 0x{x} - order: {d}", .{ offset, end_offset, block_index, order });
-                    return Error.InvalidAddress;
-                }
+                self.markBlockUsed(order, block_index);
 
                 if (order > 0 and self.isBlockFree(order, block_index)) {
                     self.markBlockFree(order - 1, block_index * 2 + 1);
                     self.markBlockFree(order - 1, block_index * 2);
                 }
 
-                self.markBlockUsed(order, block_index);
-
                 offset += block_size;
             }
-
-            if (order == 0) {
-                break;
-            }
-            order -= 1;
         }
     }
 
@@ -355,4 +347,31 @@ test "mark region allocated" {
         const index = i / MIN_BLOCK_SIZE;
         try expect(allocator.isBlockFree(0, index) == false);
     }
+}
+
+test "block invariants" {
+    const total_size = 4096 * 32; // 128KB
+    const bitmap_size = BuddyAllocator.getBitmapSize(total_size);
+    const bitmap_buffer: []u32 = std.testing.allocator.alloc(u32, bitmap_size) catch unreachable;
+    defer std.testing.allocator.free(bitmap_buffer);
+    var allocator = try BuddyAllocator.init(bitmap_buffer, total_size);
+
+    // Initial state should be valid
+    try allocator.assertBlockInvariants();
+
+    // Allocate a block at order 0
+    const block = allocator.allocateBlock(0).?;
+    try allocator.assertBlockInvariants();
+
+    // Free the block
+    try allocator.freeBlock(block, 0);
+    try allocator.assertBlockInvariants();
+
+    // Allocate a block at order 1
+    const block2 = allocator.allocateBlock(1).?;
+    try allocator.assertBlockInvariants();
+
+    // Free the block
+    try allocator.freeBlock(block2, 1);
+    try allocator.assertBlockInvariants();
 }

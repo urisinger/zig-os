@@ -41,7 +41,7 @@ const syscall = @import("idt/syscall.zig");
 pub const std_options: std.Options = .{
     .logFn = logger.logFn,
     .log_level = .debug,
-    .page_size_max = utils.LARGE_PAGE_SIZE,
+    .page_size_max = utils.PAGE_SIZE,
     .page_size_min = utils.PAGE_SIZE,
 };
 
@@ -82,5 +82,5 @@ export fn _start() callconv(.C) noreturn {
 
     scheduler.insertTask(allocator, elf.elfTask(&elf_code, allocator) catch unreachable, "task_1") catch unreachable;
 
-    @panic("dont like nigga");
+    scheduler.start();
 }

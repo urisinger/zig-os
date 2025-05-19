@@ -51,11 +51,13 @@ fn alloc(_: *anyopaque, len: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
     const num_pages = std.math.divCeil(usize, len, utils.PAGE_SIZE) catch unreachable;
 
     const start_addr = allocatePages(num_pages) catch |err| {
-        log.err("failed to allocate pages in kernel: {}", .{err});
-        unreachable;
+        log.err("failed to allocate pages becuase of error: {}", .{err});
+        @panic("failed to allocate pages");
     };
 
-    return @ptrFromInt(start_addr);
+    const ptr: [*]u8 = @ptrFromInt(start_addr);
+    @memset(ptr[0 .. num_pages * utils.PAGE_SIZE], 0);
+    return ptr;
 }
 
 fn free(_: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {
