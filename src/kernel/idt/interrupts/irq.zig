@@ -18,5 +18,5 @@ pub fn irq1(_: *volatile idt.Context) void {
         log.info("Key event: {}", .{key});
     }
 
-    @panic("dont like nigga");
+    apic.sendEoi();
 }

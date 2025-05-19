@@ -126,7 +126,7 @@ pub const Registers = packed struct {
     rax: u64 = 1,
 };
 
-const IretFrame = packed struct {
+pub const IretFrame = packed struct {
     rip: u64,
     cs: u64,
     rflags: u64,
@@ -173,6 +173,7 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
                 cpu.pushGpr();
 
                 asm volatile (
+                    \\ xor %ebp, %ebp
                     \\ mov $0x10, %ax 
                     \\ mov %ax, %ds
                     \\ mov %ax, %es

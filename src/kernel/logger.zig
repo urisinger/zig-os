@@ -99,8 +99,6 @@ fn printSourceAtAddress(writer: anytype, debug_info: *std.debug.Dwarf, address: 
     };
     defer if (sym.source_location) |loc| gpa.free(loc.file_name);
 
-    // std.debug.printSourceAtAddress(debug_info: *SelfInfo, out_stream: anytype, address: usize, tty_config: io.tty.Config)
-
     const tty_config = std.io.tty.Config.escape_codes;
 
     printLineInfo(writer, sym.source_location, address, sym.name, sym.compile_unit_name, tty_config) catch {};
