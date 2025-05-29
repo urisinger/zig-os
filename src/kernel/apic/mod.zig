@@ -71,6 +71,8 @@ pub fn enableLocalApic() !void {
         .read_write = .read_write,
     });
 
+    try pmm.setBlockAllocated(apic_page_addr);
+
     apicBase = @ptrFromInt(apic_vaddr);
 
     const io_apic_vaddr = IOAPIC_DEFAULT_ADDR + globals.hhdm_offset;
@@ -80,15 +82,19 @@ pub fn enableLocalApic() !void {
         .read_write = .read_write,
     });
 
+    try pmm.setBlockAllocated(IOAPIC_DEFAULT_ADDR);
+
     ioApicBase = @ptrFromInt(io_apic_vaddr);
 }
 
 pub inline fn writeRegister(reg: u32, value: u32) void {
-    apicBase.?[reg * 4] = value;
+    const apic_base = apicBase.?;
+    apic_base[reg * 4] = value;
 }
 
 pub inline fn readRegister(reg: u32) u32 {
-    return apicBase.?[reg * 4];
+    const apic_base = apicBase.?;
+    return apic_base[reg * 4];
 }
 
 pub inline fn writeIoRegister(reg: u32, value: u32) void {

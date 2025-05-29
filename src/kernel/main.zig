@@ -1,12 +1,10 @@
 const std = @import("std");
 const log = std.log.scoped(.main);
 
-const Gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false, .page_size = utils.PAGE_SIZE });
-
 const logger = @import("logger.zig");
 
 const utils = @import("utils.zig");
-pub const panic = logger.panic;
+pub const panic = logger.panic_handler;
 
 const boot = @import("boot.zig");
 
@@ -21,7 +19,6 @@ pub const os = @import("os.zig");
 
 const framebuffer = @import("display/framebuffer.zig");
 const console = @import("display/console.zig");
-const uvmm = @import("memory/user/vmm.zig");
 const ps2 = @import("drivers/ps2.zig");
 
 const ps2_keyboard = @import("drivers/keyboard/ps2.zig");
@@ -30,8 +27,6 @@ const gdt = @import("gdt.zig");
 
 const scheduler = @import("scheduler/scheduler.zig");
 
-const paging = @import("memory/kernel/paging.zig");
-const uheap = @import("memory/user/heap.zig");
 const core = @import("core.zig");
 
 const elf_code align(@alignOf(std.elf.Elf64_Ehdr)) = @embedFile("user_elf").*;
@@ -51,8 +46,16 @@ const entry_code = [_]u8{
 };
 
 export fn _start() callconv(.C) noreturn {
-    cpu.cli();
+    asm volatile (
+        \\ cli
+        \\ xor %rbp, %rbp
+        \\ call kmain
+        \\ ud2
+    );
+    unreachable;
+}
 
+export fn kmain() noreturn {
     framebuffer.init();
     logger.init();
 
@@ -78,9 +81,11 @@ export fn _start() callconv(.C) noreturn {
 
     syscall.init();
 
-    const allocator = core.context().gpa.allocator();
-
-    scheduler.insertTask(allocator, elf.elfTask(&elf_code, allocator) catch unreachable, "task_1") catch unreachable;
+    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
+    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
+    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
+    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
+    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
 
     scheduler.start();
 }

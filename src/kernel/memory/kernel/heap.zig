@@ -13,6 +13,8 @@ const Allocator = std.mem.Allocator;
 
 const slab = @import("slab.zig");
 
+pub const get_slab_cache = slab.get_slab_cache;
+
 pub fn init() void {
     pmm.init() catch @panic("failed to init pmm");
 
@@ -20,19 +22,6 @@ pub fn init() void {
         log.err("paging.init error: {}", .{err});
         @panic("failed to init paging {}");
     };
-}
-
-pub fn allocatePages(num_pages: usize) !usize {
-    const order = std.math.log2_int_ceil(usize, num_pages);
-
-    const alloc_start = try pmm.allocatePageBlock(order);
-
-    return alloc_start + globals.hhdm_offset;
-}
-
-pub fn freePages(start_addr: usize, num_pages: usize) !void {
-    const order = std.math.log2_int_ceil(usize, num_pages);
-    try pmm.freePageBlock(start_addr - globals.hhdm_offset, order);
 }
 
 pub const vtable = Allocator.VTable{
@@ -47,25 +36,28 @@ pub const page_allocator: Allocator = Allocator{
     .vtable = &vtable,
 };
 
-fn alloc(_: *anyopaque, len: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
+fn alloc(_: *anyopaque, len: usize, alignment: std.mem.Alignment, _: usize) ?[*]u8 {
     const num_pages = std.math.divCeil(usize, len, utils.PAGE_SIZE) catch unreachable;
 
-    const start_addr = allocatePages(num_pages) catch |err| {
+    const page_aligment = utils.getPageAlignment(alignment);
+
+    const start_addr = pmm.allocatePageBlock(num_pages, page_aligment) catch |err| {
         log.err("failed to allocate pages becuase of error: {}", .{err});
-        @panic("failed to allocate pages");
+        return null;
     };
 
-    const ptr: [*]u8 = @ptrFromInt(start_addr);
+    const ptr: [*]u8 = @ptrFromInt(start_addr + globals.hhdm_offset);
     @memset(ptr[0 .. num_pages * utils.PAGE_SIZE], 0);
+
     return ptr;
 }
 
 fn free(_: *anyopaque, buf: []u8, _: std.mem.Alignment, _: usize) void {
-    const start_addr = @intFromPtr(buf.ptr);
+    const start_addr = @intFromPtr(buf.ptr) - globals.hhdm_offset;
     const num_pages = std.math.divCeil(usize, buf.len, utils.PAGE_SIZE) catch unreachable;
-    freePages(start_addr, num_pages) catch |err| {
+    pmm.freePageBlock(start_addr, num_pages) catch |err| {
         log.err("failed to free pages becuase of error: {}", .{err});
-        @panic("failed to free pages");
+        return;
     };
 }
 

@@ -205,6 +205,7 @@ pub const PageMapping = extern struct {
         const pt = try pd.getEntry(vaddr.pd_idx);
         const entry = pt.mappings[vaddr.pt_idx];
 
+        log.info("entry: {x}", .{@as(u64, @bitCast(entry))});
         if (!entry.present) {
             return Error.EntryNotPresent;
         }

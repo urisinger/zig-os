@@ -5,9 +5,11 @@ const root = @import("root");
 
 // 4kb
 pub const PAGE_SIZE = KB(4);
+pub const PAGE_SHIFT = 12;
 
 // 2mb
 pub const LARGE_PAGE_SIZE = MB(2);
+pub const LARGE_PAGE_SHIFT = 21;
 
 pub const BYTES_PER_KB = 1024;
 pub const BYTES_PER_MB = 1024 * 1024;
@@ -23,6 +25,14 @@ pub fn MB(mb: u64) u64 {
 
 pub fn GB(gb: u64) u64 {
     return gb * BYTES_PER_GB;
+}
+
+pub fn getPageAlignment(alignment: std.mem.Alignment) std.mem.Alignment {
+    return @enumFromInt(@intFromEnum(alignment) -| PAGE_SHIFT);
+}
+
+pub fn getLargePageAlignment(alignment: std.mem.Alignment) std.mem.Alignment {
+    return @enumFromInt(@intFromEnum(alignment) -| LARGE_PAGE_SHIFT);
 }
 
 pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {

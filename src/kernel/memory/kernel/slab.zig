@@ -3,118 +3,126 @@ const log = std.log.scoped(.slab);
 const kheap = @import("heap.zig");
 const pmm = @import("../pmm.zig");
 const utils = @import("../../utils.zig");
+const globals = @import("../../globals.zig");
+var top_slab_cache: ?SlabCache = null;
 
-var slab_cache: ?*SlabCache = null;
-
-var top_slab_cache: SlabCache = null;
-
-pub fn get_slab_cache(obj_size: usize) !*SlabCache {
+pub fn get_slab_cache(T: type) !SlabCacheTyped(T) {
+    const obj_size = @sizeOf(T);
     // First check if we already have a cache for this size
-    var current = top_slab_cache;
+    if (top_slab_cache == null) {
+        top_slab_cache = SlabCache.init(@sizeOf(SlabCache), @max(4, Slab.max_objects(utils.PAGE_SIZE, @sizeOf(SlabCache))));
+    }
+
+    var current: ?*SlabCache = &top_slab_cache.?;
     while (current) |cache| {
         if (cache.obj_size == obj_size) {
-            return cache;
+            return .fromBase(cache);
+        }
+
+        if (cache.next == null) {
+            break;
         }
         current = cache.next;
     }
 
     // No existing cache found, create a new one
-    const new_cache: *SlabCache = @ptrCast(@alignCast(top_slab_cache.allocate()));
-    new_cache.* = SlabCache.init(obj_size, std.math.max(4, // Minimum 4 objects per slab
-        utils.PAGE_SIZE / obj_size // Or as many as fit in a page
-    ));
+    const new_cache: *SlabCache = @ptrCast(@alignCast(try top_slab_cache.?.allocate()));
+    new_cache.* = SlabCache.init(
+        obj_size,
+        @max(4, Slab.max_objects(utils.PAGE_SIZE, obj_size)),
+    );
 
-    // Insert at the head of the list
-    new_cache.next = top_slab_cache;
-    top_slab_cache = new_cache;
+    // Insert in order
+    new_cache.next = current.?.next;
+    current.?.next = new_cache;
 
-    return new_cache;
+    current = &top_slab_cache.?;
+    while (current) |cache| {
+        log.info("cache: {d}", .{cache.obj_size});
+        current = cache.next;
+    }
+
+    return .fromBase(new_cache);
 }
 
 /// A slab is a contiguous region of memory divided into fixed-size objects
 pub const Slab = struct {
+    pub const FreeRegion = struct {
+        next: ?*FreeRegion,
+        magic: u32 = 0xDEADBEEF,
+    };
     // Memory region for this slab
     memory: []u8,
-    // Bitmap tracking which objects are allocated
-    free_bitmap: []u8,
-    // Number of objects currently allocated
-    inuse: usize,
-    // Total number of objects in this slab
-    total: usize,
     // Size of each object
     obj_size: usize,
+    // Number of objects in use
+    inuse: usize,
     // Next slab in the list
     next: ?*Slab,
+    // Free regions in the slab
+    free_list: ?*FreeRegion,
+
+    pub fn max_objects(mem_size: usize, obj_size: usize) usize {
+        return (mem_size - @sizeOf(Slab)) / obj_size;
+    }
 
     pub fn init(memory: []u8, obj_size: usize) !*Slab {
-        const bitmap_start = @sizeOf(Slab);
-        const len = memory.len - bitmap_start;
+        log.info("obj_size: {d}", .{obj_size});
+        if (obj_size < @sizeOf(FreeRegion)) {
+            return error.ObjectTooSmall;
+        }
 
-        const total_objects = len / obj_size;
-        const bitmap_size = (total_objects + 7) / 8;
-
-        if (len < bitmap_size + obj_size) {
+        const slab_start = std.mem.alignForward(usize, @sizeOf(Slab), @alignOf(Slab));
+        if (memory.len < slab_start + obj_size) {
             return error.SlabTooSmall;
         }
 
-        // Use the first part of memory for the bitmap
-        const bitmap = memory[bitmap_start .. bitmap_start + bitmap_size];
-        // Clear the bitmap (1 means free)
-        @memset(bitmap, 0xFF);
+        const slab: *Slab = @ptrCast(@alignCast(memory.ptr));
+        slab.memory = memory[slab_start..];
+        slab.obj_size = obj_size;
+        slab.inuse = 0;
+        slab.next = null;
+        slab.free_list = null;
 
-        return @ptrCast(@alignCast(memory.ptr));
+        // Build the free list in reverse order to maintain proper linking
+        var mem_index: usize = slab.memory.len;
+        while (mem_index >= obj_size) {
+            mem_index -= obj_size;
+            const region: *FreeRegion = @ptrCast(@alignCast(slab.memory.ptr + mem_index));
+
+            region.magic = 0xDEADBEEF;
+            region.next = slab.free_list;
+            slab.free_list = region;
+        }
+
+        return slab;
     }
 
     pub fn allocate(self: *Slab) ?[*]u8 {
-        if (self.inuse >= self.total) return null;
-
-        // Find first free object using the bitmap
-        var byte_index: usize = 0;
-        while (byte_index < self.free_bitmap.len) : (byte_index += 1) {
-            const byte = self.free_bitmap[byte_index];
-            if (byte == 0) continue;
-
-            // Find the first set bit
-            const bit_index = @ctz(byte);
-            if (bit_index >= 8) continue;
-
-            const obj_index = byte_index * 8 + bit_index;
-            if (obj_index >= self.total) break;
-
-            // Clear the bit to mark as allocated
-            self.free_bitmap[byte_index] &= ~(@as(u8, 1) << @intCast(bit_index));
+        if (self.free_list) |region| {
+            if (region.magic != 0xDEADBEEF) {
+                @panic("Slab corruption detected: invalid magic number");
+            }
+            self.free_list = region.next;
             self.inuse += 1;
 
-            return @ptrCast(self.memory.ptr + obj_index * self.obj_size);
-        }
+            // Set the allocated region magic
+            const allocated: [*]u32 = @ptrCast(region);
+            @memset(allocated[0 .. self.obj_size / 4], 0xCAFEBABE);
 
+            return @ptrCast(region);
+        }
         return null;
     }
 
     pub fn free(self: *Slab, ptr: [*]u8) bool {
-        const addr = @intFromPtr(ptr);
-        const base = @intFromPtr(self.memory.ptr);
+        log.info("freeing ptr: {x}", .{ptr});
+        const region: *FreeRegion = @ptrCast(@alignCast(ptr));
+        // Clear the allocated memory before reusing it
 
-        if (addr < base or addr >= base + self.memory.len) {
-            return false;
-        }
-
-        const offset = addr - base;
-        if (offset % self.obj_size != 0) {
-            return false;
-        }
-
-        const obj_index = offset / self.obj_size;
-        const byte_index = obj_index / 8;
-        const bit_index: u3 = @intCast(obj_index % 8);
-
-        // Check if already free
-        if (self.free_bitmap[byte_index] & (@as(u8, 1) << bit_index) != 0) {
-            return false;
-        }
-
-        // Set the bit to mark as free
-        self.free_bitmap[byte_index] |= (@as(u8, 1) << bit_index);
+        region.next = self.free_list;
+        region.magic = 0xDEADBEEF;
+        self.free_list = region;
         self.inuse -= 1;
         return true;
     }
@@ -124,12 +132,38 @@ pub const Slab = struct {
     }
 
     pub fn isFull(self: *const Slab) bool {
-        return self.inuse == self.total;
+        return self.free_list == null;
     }
 };
 
+pub fn SlabCacheTyped(comptime T: type) type {
+    return struct {
+        base: *SlabCache,
+
+        pub fn fromBase(base: *SlabCache) @This() {
+            return .{ .base = base };
+        }
+
+        pub fn next(self: *const @This()) ?*SlabCache {
+            return self.base.next;
+        }
+
+        pub fn alloc(self: *const @This()) !*T {
+            return @ptrCast(@alignCast(try self.base.allocate()));
+        }
+
+        pub fn free(self: *const @This(), ptr: *T) void {
+            self.base.free(@ptrCast(ptr));
+        }
+
+        pub fn deinit(self: *const @This(), allocator: std.mem.Allocator) void {
+            self.base.deinit(allocator);
+        }
+    };
+}
+
 /// A slab cache manages multiple slabs of the same object size
-pub const SlabCache = struct {
+pub const SlabCache = extern struct {
     // Size of objects in this cache
     obj_size: usize,
     // Minimum number of objects per slab
@@ -153,6 +187,7 @@ pub const SlabCache = struct {
             .free_slabs = null,
             .full_slabs = null,
             .total_allocated = 0,
+            .next = null,
         };
     }
 
@@ -184,21 +219,19 @@ pub const SlabCache = struct {
         }
 
         // Need to create a new slab
-        const slab_size = std.math.max(
+        const slab_size = @max(
             self.min_objects * self.obj_size,
             utils.PAGE_SIZE,
         );
 
         // Calculate the best order for allocation
-        const pages_needed = (slab_size + utils.PAGE_SIZE - 1) / utils.PAGE_SIZE;
-        const order = pmm.getOrder(pages_needed);
+        const pages_needed = std.math.divCeil(usize, slab_size, utils.PAGE_SIZE) catch unreachable;
 
         // Allocate memory using the buddy allocator
-        const memory_addr = try pmm.allocatePageBlock(order);
+        const memory_addr = try pmm.allocatePageBlock(pages_needed, .@"1") + globals.hhdm_offset;
         const memory = @as([*]u8, @ptrFromInt(memory_addr))[0..slab_size];
 
         const new_slab = try Slab.init(memory, self.obj_size);
-        new_slab.* = new_slab;
 
         // Add to partial list and allocate
         new_slab.next = self.partial_slabs;
@@ -215,7 +248,7 @@ pub const SlabCache = struct {
     pub fn free(self: *SlabCache, ptr: *anyopaque) bool {
         // Try partial slabs
         var current = self.partial_slabs;
-        const prev: ?*Slab = null;
+        var prev: ?*Slab = null;
 
         while (current) |slab| {
             if (slab.free(@ptrCast(ptr))) {
@@ -238,12 +271,12 @@ pub const SlabCache = struct {
 
         // Try full slabs
         current = self.full_slabs;
-        const prev2: ?*Slab = null;
+        prev = null;
 
         while (current) |slab| {
             if (slab.free(@ptrCast(ptr))) {
                 // Move to partial list
-                if (prev2) |p| {
+                if (prev) |p| {
                     p.next = slab.next;
                 } else {
                     self.full_slabs = slab.next;
@@ -253,7 +286,7 @@ pub const SlabCache = struct {
                 self.total_allocated -= 1;
                 return true;
             }
-            prev2 = slab;
+            prev = slab;
             current = slab.next;
         }
 
@@ -273,8 +306,7 @@ pub const SlabCache = struct {
             while (current) |slab| {
                 const next = slab.next;
                 const pages = (slab.memory.len + utils.PAGE_SIZE - 1) / utils.PAGE_SIZE;
-                const order = pmm.getOrder(pages);
-                pmm.freePageBlock(@intFromPtr(slab.memory.ptr), order) catch {};
+                pmm.freePageBlock(@intFromPtr(slab.memory.ptr) - globals.hhdm_offset, pages) catch {};
                 allocator.destroy(slab);
                 current = next;
             }

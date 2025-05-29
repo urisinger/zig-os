@@ -7,55 +7,90 @@ const limine = @import("limine");
 
 const globals = @import("../globals.zig");
 const boot = @import("../boot.zig");
-
-const BuddyAllocator = @import("buddy.zig").BuddyAllocator;
+const Bitmap = @import("../structs/bitmap.zig").Bitmap;
 
 pub const Error = error{
     OutOfMemory,
     NotInitialized,
 };
-var allocator: ?BuddyAllocator = null;
 
-pub fn getOrder(num_pages: usize) usize {
-    return std.math.log2_int_ceil(usize, num_pages);
+var bitmap: ?Bitmap = undefined;
+
+pub fn setBlockAllocated(addr: u64) !void {
+    if (bitmap == null) {
+        log.err("Bitmap is not initialized", .{});
+        return Error.NotInitialized;
+    }
+    const block_index = @divExact(addr, utils.PAGE_SIZE);
+    if (block_index >= bitmap.?.size) {
+        log.err("Block index out of bounds", .{});
+        return;
+    }
+    bitmap.?.clear(block_index);
 }
 
 pub fn allocatePage() !u64 {
-    if (allocator == null) {
-        log.err("Allocator is not initialized", .{});
+    if (bitmap == null) {
+        log.err("Bitmap is not initialized", .{});
         return Error.NotInitialized;
     }
-    const block_index = allocator.?.allocateBlock(0) orelse return Error.OutOfMemory;
+    const block_index = bitmap.?.findFirstSet() orelse return Error.OutOfMemory;
+    bitmap.?.clear(block_index);
+
     return block_index * utils.PAGE_SIZE;
 }
 
 pub fn freePage(page: u64) !void {
-    if (allocator == null) {
-        log.err("Allocator is not initialized", .{});
+    if (bitmap == null) {
+        log.err("Bitmap is not initialized", .{});
         return Error.NotInitialized;
     }
     const block_index = @divExact(page, utils.PAGE_SIZE);
-    try allocator.?.freeBlock(block_index, 0);
+    bitmap.?.set(block_index);
 }
 
-pub fn allocatePageBlock(order: usize) !u64 {
-    if (allocator == null) {
-        log.err("Allocator is not initialized", .{});
+pub fn allocatePageBlock(num_pages: usize, page_alignment: std.mem.Alignment) !u64 {
+    if (bitmap == null) {
+        log.err("Bitmap is not initialized", .{});
         return Error.NotInitialized;
     }
-    const addr = (allocator.?.allocateBlock(order) orelse return Error.OutOfMemory) * utils.PAGE_SIZE;
+
+    // Find aligned block of pages
+    const page = bitmap.?.findFirstNSetAligned(num_pages, page_alignment) orelse {
+        log.err("Could not find {d} aligned pages", .{num_pages});
+        return Error.OutOfMemory;
+    };
+
+    // Verify the block is actually free
+    for (page..page + num_pages) |i| {
+        if (!bitmap.?.get(i)) {
+            log.err("Found block at {d} but it's not fully free", .{page});
+            return Error.OutOfMemory;
+        }
+    }
+
+    // Mark the block as allocated
+    bitmap.?.clearRange(page, page + num_pages);
+
+    // Calculate and verify the final address
+    if (page % (page_alignment.toByteUnits()) != 0) {
+        log.err("page {x} is not properly aligned to {d}", .{ page, page_alignment.toByteUnits() });
+        return Error.OutOfMemory;
+    }
+
+    const addr = page * utils.PAGE_SIZE;
 
     return addr;
 }
 
-pub fn freePageBlock(page: u64, order: usize) !void {
-    if (allocator == null) {
-        log.err("Allocator is not initialized", .{});
+pub fn freePageBlock(page: u64, num_pages: usize) !void {
+    if (bitmap == null) {
+        log.err("Bitmap is not initialized", .{});
         return Error.NotInitialized;
     }
 
     const block_index = @divExact(page, utils.PAGE_SIZE);
-    try allocator.?.freeBlock(block_index, order);
+    bitmap.?.setRange(block_index, block_index + num_pages);
 }
 
 pub fn init() !void {
@@ -64,6 +99,7 @@ pub fn init() !void {
 
     var max_addr: u64 = 0;
 
+    // First pass: find max address and calculate bitmap size
     for (mem_map) |mem_entry| {
         if (mem_entry.kind != .usable) {
             continue;
@@ -76,51 +112,54 @@ pub fn init() !void {
     }
 
     const num_pages: usize = std.mem.alignForward(u64, max_addr, utils.PAGE_SIZE) / utils.PAGE_SIZE;
+    const bitmap_u64s: usize = Bitmap.getBitmapSize(num_pages);
+    const bitmap_num_pages = std.math.divCeil(u64, bitmap_u64s * 8, utils.PAGE_SIZE) catch unreachable;
 
-    // Calculate bitmap size for the buddy allocator
-    // Each order has a different number of blocks:
-    // - Order 0: num_pages blocks
-    // - Order 1: num_pages/2 blocks
-    // - Order 2: num_pages/4 blocks
-    // etc.
-    const bitmap_u32s: usize = BuddyAllocator.getBitmapSize(num_pages * utils.PAGE_SIZE);
-    const bitmap_num_pages = std.math.divCeil(u64, bitmap_u32s * 4, utils.PAGE_SIZE) catch unreachable;
-
-    // Find a memory region to place the bitmap
+    // Second pass: find a suitable location for the bitmap
     var bitmap_page: u64 = 0;
+    var bitmap_found = false;
     for (mem_map) |mem_entry| {
-        if (mem_entry.kind == .usable and std.math.divCeil(u64, mem_entry.length, utils.PAGE_SIZE) catch unreachable > bitmap_num_pages) {
-            bitmap_page = @divExact(mem_entry.base, utils.PAGE_SIZE);
-            break;
+        if (mem_entry.kind == .usable) {
+            const entry_pages = std.math.divCeil(u64, mem_entry.length, utils.PAGE_SIZE) catch unreachable;
+            if (entry_pages >= bitmap_num_pages) {
+                bitmap_page = @divExact(mem_entry.base, utils.PAGE_SIZE);
+                bitmap_found = true;
+                break;
+            }
         }
     }
 
-    const bitmap_vaddr: [*]u32 = @ptrFromInt(bitmap_page * utils.PAGE_SIZE + offset);
+    if (!bitmap_found) {
+        log.err("Could not find suitable location for bitmap", .{});
+        return error.OutOfMemory;
+    }
 
-    // Initialize buddy allocator
-    var buddy = try BuddyAllocator.init(bitmap_vaddr[0..bitmap_u32s], num_pages * utils.PAGE_SIZE);
+    const bitmap_vaddr: [*]u64 = @ptrFromInt(bitmap_page * utils.PAGE_SIZE + offset);
 
-    // Mark all unusable regions as allocated in the buddy allocator
+    // Initialize bitmap - start with all pages marked as used (0)
+    bitmap = try Bitmap.init(bitmap_vaddr[0..bitmap_u64s], num_pages);
+    bitmap.?.setAll(); // Set all bits to 1 (free)
+
+    // Third pass: mark all usable memory as free (1)
+    for (mem_map) |mem_entry| {
+        if (mem_entry.kind == .usable) {
+            const start_page = std.math.divFloor(u64, mem_entry.base, utils.PAGE_SIZE) catch unreachable;
+            const end_page = std.math.divCeil(u64, mem_entry.base + mem_entry.length, utils.PAGE_SIZE) catch unreachable;
+            bitmap.?.setRange(start_page, end_page); // Mark as free (1)
+        }
+    }
+
+    // Fourth pass: mark unusable regions as used (0)
     for (mem_map) |mem_entry| {
         if (mem_entry.kind != .usable) {
-            if (mem_entry.base + mem_entry.length > max_addr) {
-                continue;
-            }
-
-            // Mark as allocated in buddy system
-            const start_addr = std.mem.alignBackward(u64, mem_entry.base, utils.PAGE_SIZE);
-            const end_addr = std.mem.alignForward(u64, mem_entry.base + mem_entry.length, utils.PAGE_SIZE);
-
-            buddy.markRegionAllocated(start_addr, end_addr) catch |err| {
-                log.err("Failed to mark unusable region at 0x{x} with size 0x{x}: {} 0x{x}", .{ start_addr, end_addr, err, max_addr });
-            };
+            const start_page = std.math.divFloor(u64, mem_entry.base, utils.PAGE_SIZE) catch unreachable;
+            const end_page = std.math.divCeil(u64, mem_entry.base + mem_entry.length, utils.PAGE_SIZE) catch unreachable;
+            bitmap.?.clearRange(start_page, end_page); // Mark as used (0)
         }
     }
 
-    buddy.markRegionAllocated(bitmap_page * utils.PAGE_SIZE, (bitmap_page + bitmap_num_pages) * utils.PAGE_SIZE) catch |err| {
-        log.err("Failed to mark bitmap region at 0x{x} with size 0x{x}: {}", .{ bitmap_page, bitmap_num_pages, err });
-    };
+    // Finally, mark the bitmap region itself as used (0)
+    bitmap.?.clearRange(bitmap_page, bitmap_page + bitmap_num_pages);
 
-    allocator = buddy;
-    log.info("initialized pmm with buddy allocator", .{});
+    log.info("initialized pmm with {d} pages", .{num_pages});
 }

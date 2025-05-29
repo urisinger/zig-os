@@ -1,6 +1,10 @@
 const std = @import("std");
 const log = std.log.scoped(.vmm);
 
+const slab = @import("../kernel/slab.zig");
+
+const TypedSlabCache = slab.SlabCacheTyped;
+
 pub const Permissions = enum { Read, ReadWrite, ReadExecute };
 
 pub const Attr = struct {
@@ -104,7 +108,7 @@ pub const VmAllocator = struct {
     root: ?*Node,
     start: u64,
     end: u64,
-    allocator: std.mem.Allocator,
+    slab: TypedSlabCache(Node),
 
     pub fn format(self: VmAllocator, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         try writer.print("VmAllocator:\n", .{});
@@ -123,12 +127,12 @@ pub const VmAllocator = struct {
         try self.format_recursive(n.right, depth + 1, writer);
     }
 
-    pub fn init(allocator: std.mem.Allocator, start: u64, size: u64) VmAllocator {
+    pub fn init(start: u64, size: u64) !VmAllocator {
         return VmAllocator{
             .root = null,
-            .allocator = allocator,
             .start = start,
             .end = start + size,
+            .slab = try slab.get_slab_cache(Node),
         };
     }
 
@@ -147,7 +151,7 @@ pub const VmAllocator = struct {
             self.free(right);
         }
 
-        self.allocator.destroy(node);
+        self.slab.free(node);
     }
 
     pub fn find_node(self: *VmAllocator, addr: u64) ?*Node {
@@ -193,7 +197,7 @@ pub const VmAllocator = struct {
     }
 
     pub fn insert_region(self: *VmAllocator, region: Region) !void {
-        const node = try self.allocator.create(Node);
+        const node = try self.slab.alloc();
 
         node.* = .{
             .region = region,

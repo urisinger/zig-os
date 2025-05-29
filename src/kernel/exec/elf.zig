@@ -3,6 +3,8 @@ const log = std.log.scoped(.elf);
 const elf = std.elf;
 const Header = elf.Header;
 
+const slab = @import("../memory/kernel/slab.zig");
+
 const utils = @import("../utils.zig");
 const globals = @import("../globals.zig");
 
@@ -15,8 +17,8 @@ const paging = @import("../memory/kernel/paging.zig");
 const uheap = @import("../memory/user/heap.zig");
 const idt = @import("../idt/idt.zig");
 
-pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, allocator: std.mem.Allocator) !*Task {
-    var user_vmm = uvmm.VmAllocator.init(allocator, utils.MB(1), 0x00007FFFFFFFFFFF);
+pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8) !*Task {
+    var user_vmm = try uvmm.VmAllocator.init(utils.MB(1), 0x00007FFFFFFFFFFF);
 
     const user_pml4 = paging.createNewAddressSpace() catch unreachable;
 
@@ -25,7 +27,7 @@ pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, allocator: st
     const user_stack_bottom = uheap.allocateUserPages(&user_vmm, user_pml4, 3) catch unreachable;
     const user_stack_top = user_stack_bottom + 3 * utils.PAGE_SIZE;
 
-    const kernel_stack = kheap.allocatePages(2) catch unreachable;
+    const kernel_stack = try pmm.allocatePageBlock(2, .@"1") + globals.hhdm_offset;
 
     const kernel_stack_top = kernel_stack + 2 * utils.PAGE_SIZE;
     const context_ptr: *idt.Context = @ptrFromInt(kernel_stack_top - @sizeOf(idt.Context));
@@ -43,7 +45,7 @@ pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, allocator: st
         },
     };
 
-    const task = allocator.create(Task) catch unreachable;
+    const task = try (try slab.get_slab_cache(Task)).alloc();
 
     task.* = Task{
         .context = context_ptr,
@@ -111,6 +113,8 @@ pub fn loadElf(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_t
             else => {},
         }
     }
+
+    log.info("PML4: {any}", .{pml4.getPaddr(@bitCast(@as(u64, 0xffff8000fee00000)))});
 
     return header.entry;
 }

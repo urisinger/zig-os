@@ -173,7 +173,7 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
                 cpu.pushGpr();
 
                 asm volatile (
-                    \\ xor %ebp, %ebp
+                    \\ xor %rbp, %rbp
                     \\ mov $0x10, %ax 
                     \\ mov %ax, %ds
                     \\ mov %ax, %es

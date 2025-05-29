@@ -48,56 +48,51 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.enum_litera
     log_writer.print(colored_prefix ++ format ++ "\n", args) catch return;
 }
 
-pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
-    @branchHint(.cold);
-    const log = std.log.scoped(.panic);
-    log.err("kernel panic: {s}", .{msg});
-    const panic_printer = log_writer;
-
-    var iter = std.debug.StackIterator.init(@returnAddress(), @frameAddress());
-    if (getSelfDwarf()) |_dwarf| {
-        var dwarf = _dwarf;
-
-        while (iter.next()) |r_addr| {
-            printSourceAtAddress(panic_printer, &dwarf, r_addr) catch {};
-        }
-    } else |err| {
-        log.err("failed to open DWARF info: {}", .{err});
-
-        while (iter.next()) |r_addr| {
-            std.fmt.format(panic_printer, "  \x1B[90m0x{x:0>16}\x1B[0m\n", .{r_addr}) catch {};
-        }
-    }
-
-    std.fmt.format(panic_printer, "\n", .{}) catch {};
+pub fn panic_handler(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+    panic(msg);
 
     cpu.halt();
 }
 
-pub const Addr2Line = struct {
-    addr: usize,
+pub fn panic(msg: []const u8) void {
+    @branchHint(.cold);
+    const log = std.log.scoped(.panic);
+    log.err("kernel panic: {s}", .{msg});
 
-    pub fn format(self: Addr2Line, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
-        const gpa = core.context().gpa.allocator();
+    dumpStack(log_writer, @returnAddress(), @frameAddress()) catch {};
+}
 
-        if (getSelfDwarf()) |_dwarf| {
-            var dwarf = _dwarf;
-            defer dwarf.deinit(gpa);
-            try printSourceAtAddress(writer, &dwarf, self.addr);
-        } else |err| {
-            try std.fmt.format(writer, "failed to open DWARF info: {}\n", .{err});
+pub fn dumpStack(writer: anytype, return_address: usize, frame_address: usize) !void {
+    var iter = std.debug.StackIterator.init(return_address, frame_address);
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .thread_safe = false,
+    }){ .backing_allocator = std.heap.page_allocator };
+    const gpa_allocator = gpa.allocator();
+
+    if (getSelfDwarf(gpa_allocator)) |_dwarf| {
+        var dwarf = _dwarf;
+
+        while (iter.next()) |r_addr| {
+            printSourceAtAddress(gpa_allocator, writer, &dwarf, r_addr) catch {};
+        }
+    } else |err| {
+        std.log.scoped(.panic).err("failed to open DWARF info: {}", .{err});
+
+        while (iter.next()) |r_addr| {
+            std.fmt.format(writer, "  \x1B[90m0x{x:0>16}\x1B[0m\n", .{r_addr}) catch {};
         }
     }
-};
 
-fn printSourceAtAddress(writer: anytype, debug_info: *std.debug.Dwarf, address: usize) !void {
-    const gpa = core.context().gpa.allocator();
+    std.fmt.format(writer, "\n", .{}) catch {};
+}
 
-    const sym = debug_info.getSymbol(gpa, address) catch {
+fn printSourceAtAddress(allocator: std.mem.Allocator, writer: anytype, debug_info: *std.debug.Dwarf, address: usize) !void {
+    const sym = debug_info.getSymbol(allocator, address) catch {
         try std.fmt.format(writer, "\x1B[90m0x{x}\x1B[0m\n", .{address});
         return;
     };
-    defer if (sym.source_location) |loc| gpa.free(loc.file_name);
+    defer if (sym.source_location) |loc| allocator.free(loc.file_name);
 
     const tty_config = std.io.tty.Config.escape_codes;
 
@@ -200,7 +195,6 @@ const source_files: []const SourceFile = &.{
     .open("idt/syscall.zig"),
     .open("logger.zig"),
     .open("main.zig"),
-    .open("memory/buddy.zig"),
     .open("memory/kernel/heap.zig"),
     .open("memory/kernel/paging.zig"),
     .open("memory/pmm.zig"),
@@ -216,10 +210,8 @@ const source_files: []const SourceFile = &.{
     .open("idt/interrupts/irq.zig"),
 };
 
-fn getSelfDwarf() !std.debug.Dwarf {
+fn getSelfDwarf(allocator: std.mem.Allocator) !std.debug.Dwarf {
     if (!conf.STACK_TRACE) return error.StackTracesDisabled;
-
-    const gpa = core.context().gpa.allocator();
 
     //std.debug.captureStackTrace(first_address: ?usize, stack_trace: *std.builtin.StackTrace)
 
@@ -279,7 +271,7 @@ fn getSelfDwarf() !std.debug.Dwarf {
         .is_macho = false,
     };
 
-    try dwarf.open(gpa);
+    try dwarf.open(allocator);
 
     return dwarf;
 }

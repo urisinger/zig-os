@@ -56,8 +56,9 @@ fn nextTask() *idt.Context {
     }
 
     tss.set_rsp(next_task.task.kernel_stack);
+    const pml4 = next_task.task.pml4;
 
-    cpu.setCr3(@intFromPtr(next_task.task.pml4) - globals.hhdm_offset);
+    cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
     context.kernel_stack = next_task.task.kernel_stack;
     context.current_task = next_task.task;
@@ -65,8 +66,10 @@ fn nextTask() *idt.Context {
     return next_task.task.context;
 }
 
-pub fn insertTask(allocator: std.mem.Allocator, task: *Task, name: []const u8) !void {
-    const new_task = try allocator.create(TaskQueueEntry);
+pub fn insertTask(task: *Task, name: []const u8) !void {
+    const slab = try kheap.get_slab_cache(TaskQueueEntry);
+    const new_task = try slab.alloc();
+    log.info("new_task: 0x{x}", .{@intFromPtr(new_task)});
 
     new_task.task = task;
     new_task.name = name;

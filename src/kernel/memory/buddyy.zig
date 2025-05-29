@@ -71,7 +71,7 @@ pub const BuddyAllocator = struct {
 
         // Mark all blocks at max_order as allocated except the first one
         const max_bitmap = allocator.bitmaps[max_order];
-        @memset(max_bitmap, 0xFFFFFFFF);
+        @memset(max_bitmap, 0);
 
         return allocator;
     }
