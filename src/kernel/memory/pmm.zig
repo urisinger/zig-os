@@ -23,7 +23,6 @@ pub fn setBlockAllocated(addr: u64) !void {
     }
     const block_index = @divExact(addr, utils.PAGE_SIZE);
     if (block_index >= bitmap.?.size) {
-        log.err("Block index out of bounds", .{});
         return;
     }
     bitmap.?.clear(block_index);

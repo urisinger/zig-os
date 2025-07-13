@@ -213,8 +213,6 @@ const source_files: []const SourceFile = &.{
 fn getSelfDwarf(allocator: std.mem.Allocator) !std.debug.Dwarf {
     if (!conf.STACK_TRACE) return error.StackTracesDisabled;
 
-    //std.debug.captureStackTrace(first_address: ?usize, stack_trace: *std.builtin.StackTrace)
-
     const kernel_file = @import("boot.zig").kernel_file.response orelse return error.NoKernelFile;
     const elf_bin = kernel_file.kernel_file.data();
     var elf = std.io.fixedBufferStream(elf_bin);
@@ -225,7 +223,6 @@ fn getSelfDwarf(allocator: std.mem.Allocator) !std.debug.Dwarf {
 
     for (sectionsHeaders(elf_bin, header)) |shdr| {
         const name = getString(elf_bin, header, shdr.sh_name);
-        // std.log.info("shdr: {s}", .{name});
 
         if (std.mem.eql(u8, name, ".debug_info")) {
             sections[@intFromEnum(std.debug.Dwarf.Section.Id.debug_info)] = .{
