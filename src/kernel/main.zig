@@ -81,7 +81,7 @@ export fn kmain() noreturn {
 
     syscall.init();
 
-    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
+    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_1") catch unreachable;
     scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
     scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
     scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;

@@ -5,7 +5,7 @@ const cpu = @import("../cpu.zig");
 
 const syscalls = @import("../syscalls.zig");
 
-var syscall_table: [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.x86_64_sysv) u64 = [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.SysV) u64{
+var syscall_table: [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.{ .x86_64_sysv = .{} }) u64 = [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.{ .x86_64_sysv = .{} }) u64{
     &syscalls.testSyscall,
     &syscalls.testSyscall,
     &syscalls.testSyscall,

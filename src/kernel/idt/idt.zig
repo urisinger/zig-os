@@ -97,7 +97,7 @@ var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
     break :init initial_value;
 };
 
-export fn interruptDispatch(context: *Context) callconv(.x86_64_sysv) *Context {
+export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{}}) *Context {
     scheduler.saveContext(context);
     if (handlers[context.interrupt_num]) |handler| {
         handler(context);

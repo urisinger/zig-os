@@ -11,46 +11,35 @@ const conf = @import("conf.zig");
 const core = @import("core.zig");
 const Writer = std.Io.Writer;
 
-const log_writer: Writer = .{
-    .vtable = .{
+var log_writer: Writer = .{
+    .vtable = &.{
         .drain = drain,
+        .flush = flush,
     },
-    .buffer = &.{}
+    .buffer = &.{},
 };
 
-pub fn drain(w: *Writer, data: []const []const u8, splat: usize) Error!usize {
+pub fn drain(_: *Writer, data: []const []const u8, splat: usize) Writer.Error!usize {
+    var written: usize = 0;
     if (data.len == 0) return 0;
     for (data[0 .. data.len - 1]) |bytes| {
-        const dest = w.buffer[w.end..];
-        const len = @min(bytes.len, dest.len);
-        @memcpy(dest[0..len], bytes[0..len]);
-        w.end += len;
-        if (bytes.len > dest.len) return error.WriteFailed;
+        console.puts(bytes) catch return error.WriteFailed;
+        serial.puts(bytes);
+        written += bytes.len;
     }
+
     const pattern = data[data.len - 1];
-    const dest = w.buffer[w.end..];
-    switch (pattern.len) {
-        0 => return 0,
-        1 => {
-            assert(splat >= dest.len);
-            @memset(dest, pattern[0]);
-            w.end += dest.len;
-            return error.WriteFailed;
-        },
-        else => {
-            for (0..splat) |i| {
-                const remaining = dest[i * pattern.len ..];
-                const len = @min(pattern.len, remaining.len);
-                @memcpy(remaining[0..len], pattern[0..len]);
-                w.end += len;
-                if (pattern.len > remaining.len) return error.WriteFailed;
-            }
-            unreachable;
-        },
+    for (0..splat) |_| {
+        console.puts(pattern) catch return error.WriteFailed;
+        serial.puts(pattern);
+        written += pattern.len;
     }
+    return written;
 }
 
-
+pub fn flush(_: *Writer) !void {
+    console.flush() catch return error.WriteFailed;
+}
 
 pub fn init() void {
     serial.init() catch {
@@ -91,10 +80,10 @@ pub fn panic(msg: []const u8) void {
     const log = std.log.scoped(.panic);
     log.err("kernel panic: {s}", .{msg});
 
-    dumpStack(log_writer, @returnAddress(), @frameAddress()) catch {};
+    dumpStack(&log_writer, @returnAddress(), @frameAddress()) catch {};
 }
 
-pub fn dumpStack(writer: anytype, return_address: usize, frame_address: usize) !void {
+pub fn dumpStack(writer: *std.Io.Writer, return_address: usize, frame_address: usize) !void {
     var iter = std.debug.StackIterator.init(return_address, frame_address);
 
     var gpa = std.heap.GeneralPurposeAllocator(.{
@@ -112,16 +101,16 @@ pub fn dumpStack(writer: anytype, return_address: usize, frame_address: usize) !
         std.log.scoped(.panic).err("failed to open DWARF info: {}", .{err});
 
         while (iter.next()) |r_addr| {
-            std.fmt.format(writer, "  \x1B[90m0x{x:0>16}\x1B[0m\n", .{r_addr}) catch {};
+            try writer.print( "  \x1B[90m0x{x:0>16}\x1B[0m\n", .{r_addr});
         }
     }
 
-    std.fmt.format(writer, "\n", .{}) catch {};
+    try writer.print("\n", .{});
 }
 
-fn printSourceAtAddress(allocator: std.mem.Allocator, writer: anytype, debug_info: *std.debug.Dwarf, address: usize) !void {
+fn printSourceAtAddress(allocator: std.mem.Allocator, writer: *std.Io.Writer, debug_info: *std.debug.Dwarf, address: usize) !void {
     const sym = debug_info.getSymbol(allocator, address) catch {
-        try std.fmt.format(writer, "\x1B[90m0x{x}\x1B[0m\n", .{address});
+        try writer.print("\x1B[90m0x{x}\x1B[0m\n", .{address});
         return;
     };
     defer if (sym.source_location) |loc| allocator.free(loc.file_name);
@@ -132,7 +121,7 @@ fn printSourceAtAddress(allocator: std.mem.Allocator, writer: anytype, debug_inf
 }
 
 fn printLineInfo(
-    out_stream: anytype,
+    out_stream: *std.Io.Writer,
     source_location: ?std.debug.SourceLocation,
     address: usize,
     symbol_name: []const u8,
@@ -165,12 +154,12 @@ fn printLineInfo(
                 source_line = lines_iter.next() orelse "<out-of-bounds>";
             }
 
-            try std.fmt.format(out_stream, "{s}\n", .{source_line});
+            try out_stream.print("{s}\n", .{source_line});
             if (sl.column > 0) {
                 // The caret already takes one char
                 const space_needed = @as(usize, @intCast(sl.column - 1));
 
-                try out_stream.writeByteNTimes(' ', space_needed);
+                try out_stream.splatByteAll(' ', space_needed);
                 try tty_config.setColor(out_stream, .green);
                 try out_stream.writeAll("^");
                 try tty_config.setColor(out_stream, .reset);
@@ -247,7 +236,7 @@ fn getSelfDwarf(allocator: std.mem.Allocator) !std.debug.Dwarf {
 
     const kernel_file = @import("boot.zig").kernel_file.response orelse return error.NoKernelFile;
     const elf_bin = kernel_file.kernel_file.data();
-    var elf = std.io.fixedBufferStream(elf_bin);
+    var elf = std.Io.Reader.fixed(elf_bin);
 
     const header = try std.elf.Header.read(&elf);
 

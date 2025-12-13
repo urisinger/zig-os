@@ -16,6 +16,8 @@ const kheap = @import("../memory/kernel/heap.zig");
 const paging = @import("../memory/kernel/paging.zig");
 const uheap = @import("../memory/user/heap.zig");
 const idt = @import("../idt/idt.zig");
+const Elf64_Phdr = elf.Elf64_Phdr;
+const Elf32_Phdr = elf.Elf32_Phdr;
 
 pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8) !*Task {
     var user_vmm = try uvmm.VmAllocator.init(utils.MB(1), 0x00007FFFFFFFFFFF);
@@ -58,11 +60,16 @@ pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8) !*Task {
 }
 
 pub fn loadElf(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_table.PageMapping, vmm: *uvmm.VmAllocator) !u64 {
-    const header = try Header.read(std.Io.Reader.fixed(buffer[0..64]));
+    var fixed = std.Io.Reader.fixed(buffer[0..64]);
+    const header = try Header.read(&fixed);
 
-    var iter = header.program_header_iterator(std.io.fixedBufferStream(buffer));
+    for (0..header.phnum) |index| {
+        const size: u64 = if (header.is_64) @sizeOf(Elf64_Phdr) else @sizeOf(Elf32_Phdr);
+        const offset = header.phoff + size * index;
 
-    while (try iter.next()) |item| {
+        fixed = .fixed(buffer[offset .. buffer.len - 1]);
+        const item = try takePhdr(&fixed, header);
+
         switch (item.p_type) {
             elf.PT_LOAD => {
                 const page_size = utils.PAGE_SIZE;
@@ -117,4 +124,23 @@ pub fn loadElf(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_t
     log.info("PML4: {any}", .{pml4.getPaddr(@bitCast(@as(u64, 0xffff8000fee00000)))});
 
     return header.entry;
+}
+
+fn takePhdr(reader: *std.io.Reader, elf_header: Header) !Elf64_Phdr {
+    if (elf_header.is_64) {
+        const phdr = try reader.takeStruct(Elf64_Phdr, elf_header.endian);
+        return phdr;
+    }
+
+    const phdr = try reader.takeStruct(Elf32_Phdr, elf_header.endian);
+    return .{
+        .p_type = phdr.p_type,
+        .p_offset = phdr.p_offset,
+        .p_vaddr = phdr.p_vaddr,
+        .p_paddr = phdr.p_paddr,
+        .p_filesz = phdr.p_filesz,
+        .p_memsz = phdr.p_memsz,
+        .p_flags = phdr.p_flags,
+        .p_align = phdr.p_align,
+    };
 }
