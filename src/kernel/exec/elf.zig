@@ -58,7 +58,7 @@ pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8) !*Task {
 }
 
 pub fn loadElf(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_table.PageMapping, vmm: *uvmm.VmAllocator) !u64 {
-    const header = try Header.parse(buffer[0..64]);
+    const header = try Header.read(std.Io.Reader.fixed(buffer[0..64]));
 
     var iter = header.program_header_iterator(std.io.fixedBufferStream(buffer));
 

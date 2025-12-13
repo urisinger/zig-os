@@ -9,16 +9,48 @@ const console = @import("display/console.zig");
 const conf = @import("conf.zig");
 
 const core = @import("core.zig");
+const Writer = std.Io.Writer;
 
-const log_writer = std.io.Writer(void, error{}, write){
-    .context = {},
+const log_writer: Writer = .{
+    .vtable = .{
+        .drain = drain,
+    },
+    .buffer = &.{}
 };
 
-fn write(_: void, bytes: []const u8) error{}!usize {
-    serial.puts(bytes);
-    console.puts(bytes) catch {};
-    return bytes.len;
+pub fn drain(w: *Writer, data: []const []const u8, splat: usize) Error!usize {
+    if (data.len == 0) return 0;
+    for (data[0 .. data.len - 1]) |bytes| {
+        const dest = w.buffer[w.end..];
+        const len = @min(bytes.len, dest.len);
+        @memcpy(dest[0..len], bytes[0..len]);
+        w.end += len;
+        if (bytes.len > dest.len) return error.WriteFailed;
+    }
+    const pattern = data[data.len - 1];
+    const dest = w.buffer[w.end..];
+    switch (pattern.len) {
+        0 => return 0,
+        1 => {
+            assert(splat >= dest.len);
+            @memset(dest, pattern[0]);
+            w.end += dest.len;
+            return error.WriteFailed;
+        },
+        else => {
+            for (0..splat) |i| {
+                const remaining = dest[i * pattern.len ..];
+                const len = @min(pattern.len, remaining.len);
+                @memcpy(remaining[0..len], pattern[0..len]);
+                w.end += len;
+                if (pattern.len > remaining.len) return error.WriteFailed;
+            }
+            unreachable;
+        },
+    }
 }
+
+
 
 pub fn init() void {
     serial.init() catch {
@@ -287,7 +319,7 @@ fn getSectionData(bin: []const u8, shdr: std.elf.Elf64_Shdr) []const u8 {
 
 fn sectionsHeaders(bin: []const u8, header: std.elf.Header) []const std.elf.Elf64_Shdr {
     // FIXME: bounds checking maybe
-    const section_headers: [*]const std.elf.Elf64_Shdr = @alignCast(@ptrCast(bin.ptr + header.shoff));
+    const section_headers: [*]const std.elf.Elf64_Shdr = @ptrCast(@alignCast(bin.ptr + header.shoff));
     return section_headers[0..header.shnum];
 }
 

@@ -155,8 +155,8 @@ pub fn scrollAndFlush() ConsoleError!void {
     const height = virt.height;
     const pitch_pixels = virt.pitch / @sizeOf(Color); // actual row width in pixels
 
-    const virt_pixels: [*]Color = @alignCast(@ptrCast(virt.address));
-    const real_pixels: [*]Color = @alignCast(@ptrCast(real.address));
+    const virt_pixels: [*]Color = @ptrCast(@alignCast(virt.address));
+    const real_pixels: [*]Color = @ptrCast(@alignCast(real.address));
 
     const rows_to_scroll = font_y;
 

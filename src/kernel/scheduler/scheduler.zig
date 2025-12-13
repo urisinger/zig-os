@@ -40,7 +40,8 @@ pub fn saveContext(constext: *idt.Context) void {
     cur_task.task.context = constext;
 }
 
-pub fn schedulerTick() callconv(.SysV) *idt.Context {
+pub fn schedulerTick() callconv(.{ .x86_64_sysv = .{
+}  }) *idt.Context {
     return nextTask();
 }
 
@@ -123,7 +124,7 @@ pub export fn start() noreturn {
           [rflags] "r" (frame.rflags),
           [cs] "r" (frame.cs),
           [rip] "r" (frame.rip),
-        : "memory"
+        : .{ .memory = true }
     );
 
     unreachable;

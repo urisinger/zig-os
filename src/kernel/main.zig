@@ -45,7 +45,7 @@ const entry_code = [_]u8{
     0xeb, 0xfc, // jmp $-3
 };
 
-export fn _start() callconv(.C) noreturn {
+export fn _start() callconv(.c) noreturn {
     asm volatile (
         \\ cli
         \\ xor %rbp, %rbp

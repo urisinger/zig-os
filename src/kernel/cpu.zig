@@ -8,7 +8,7 @@ pub inline fn setCr3(pml4: u64) void {
     asm volatile ("mov %[pml4], %cr3"
         :
         : [pml4] "r" (pml4),
-        : "memory"
+        : .{ .memory = true }
     );
 }
 
@@ -23,7 +23,7 @@ pub inline fn lidt(idtr: u64) void {
     asm volatile ("lidt (%[idtr])"
         :
         : [idtr] "r" (idtr),
-        : "memory"
+        : .{ .memory = true }
     );
 }
 
@@ -31,7 +31,7 @@ pub inline fn lgdt(gdtr: u64) void {
     asm volatile ("lgdt (%[gdtr])"
         :
         : [gdtr] "r" (gdtr),
-        : "memory"
+        : .{ .memory = true }
     );
 }
 
@@ -45,7 +45,7 @@ pub inline fn ltr(selector: u16) void {
     asm volatile ("ltr %ax"
         :
         : [sel] "{ax}" (selector),
-        : "memory"
+        : .{ .memory = true }
     );
 }
 
@@ -54,7 +54,7 @@ pub inline fn invlpg(page: u64) void {
     asm volatile ("invlpg (%[addr])"
         :
         : [addr] "r" (ptr),
-        : "memory"
+        : .{ .memory = true }
     );
 }
 
@@ -146,6 +146,6 @@ pub inline fn writeMsr(msr: u64, value: u64) void {
         : [msr] "{ecx}" (msr),
           [low] "{eax}" (@as(u32, @truncate(value))),
           [high] "{edx}" (@as(u32, @intCast(value >> 32))),
-        : "memory"
+        : .{ .memory = true }
     );
 }

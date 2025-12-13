@@ -97,7 +97,7 @@ var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
     break :init initial_value;
 };
 
-export fn interruptDispatch(context: *Context) callconv(.SysV) *Context {
+export fn interruptDispatch(context: *Context) callconv(.x86_64_sysv) *Context {
     scheduler.saveContext(context);
     if (handlers[context.interrupt_num]) |handler| {
         handler(context);
@@ -166,7 +166,7 @@ pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) voi
         const push_num = std.fmt.comptimePrint("push ${} \n", .{num});
 
         break :scope struct {
-            fn handle() callconv(.Naked) void {
+            fn handle() callconv(.naked) void {
                 cpu.swapgs_if_necessary();
 
                 asm volatile (push_error ++ push_num);

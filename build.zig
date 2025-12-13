@@ -39,7 +39,7 @@ pub fn build(b: *std.Build) !void {
     _ = runQemu(b, &opts, iso.path);
 }
 
-fn getTarget(arch: std.Target.Cpu.Arch) std.Target.Query  {
+fn getTarget(arch: std.Target.Cpu.Arch) std.Target.Query {
     const Target = std.Target;
 
     var enabled_features = Target.Cpu.Feature.Set.empty;
@@ -87,20 +87,25 @@ fn createKernelElf(b: *std.Build, opts: *const Opts, target: std.Build.ResolvedT
 
     const user = b.addExecutable(.{
         .name = "user_elf",
-        .root_source_file = b.path("src/user/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .code_model = .default,
+        .use_llvm = true,
+        .root_module = b.addModule("user", .{
+            .root_source_file = b.path("src/user/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .code_model = .default,
+        }),
     });
 
     const kernel = b.addExecutable(.{
         .name = "kernel",
-        .root_source_file = b.path("src/kernel/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .code_model = code_model,
+        .use_llvm = true,
+        .root_module = b.addModule("kernel", .{
+            .root_source_file = b.path("src/kernel/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .code_model = code_model,
+        }),
     });
-
 
     kernel.setLinkerScript(linker_script);
     kernel.want_lto = false;
@@ -114,7 +119,6 @@ fn createKernelElf(b: *std.Build, opts: *const Opts, target: std.Build.ResolvedT
 
     return kernel;
 }
-
 
 fn getLinkerScript(b: *std.Build, arch: std.Target.Cpu.Arch) std.Build.LazyPath {
     return switch (arch) {
@@ -132,13 +136,12 @@ fn runQemu(b: *std.Build, opts: *const Opts, os_iso: std.Build.LazyPath) *std.Bu
         "q35",
         "-m",
         "2G",
-        "-serial", 
+        "-serial",
         "stdio",
         "-drive",
     });
 
     qemu_step.addPrefixedFileArg("format=raw,file=", os_iso);
-
 
     if (opts.display) {
         qemu_step.addArgs(&.{
@@ -170,13 +173,12 @@ fn runQemu(b: *std.Build, opts: *const Opts, os_iso: std.Build.LazyPath) *std.Bu
     return qemu_step;
 }
 
-const OutputStep = struct {step: *std.Build.Step.Run, path: std.Build.LazyPath,};
+const OutputStep = struct {
+    step: *std.Build.Step.Run,
+    path: std.Build.LazyPath,
+};
 
-fn createIso(
-    b: *std.Build,
-    kernel_elf: std.Build.LazyPath,
-    uefi: bool
-) OutputStep {
+fn createIso(b: *std.Build, kernel_elf: std.Build.LazyPath, uefi: bool) OutputStep {
     const limine_bootloader_pkg = b.dependency("limine_bootloader", .{});
 
     const limine_make = b.addSystemCommand(&.{
@@ -189,11 +191,11 @@ fn createIso(
     _ = wf.addCopyFile(b.path("limine.conf"), "boot/limine/limine.conf");
     _ = wf.addCopyFile(limine_bootloader_pkg.path("limine-bios.sys"), "boot/limine/limine-bios.sys");
     _ = wf.addCopyFile(limine_bootloader_pkg.path("limine-bios-cd.bin"), "boot/limine/limine-bios-cd.bin");
-    if (uefi){
+    if (uefi) {
         _ = wf.addCopyFile(limine_bootloader_pkg.path("limine-uefi-cd.bin"), "boot/limine/limine-uefi-cd.bin");
         _ = wf.addCopyFile(limine_bootloader_pkg.path("BOOTX64.EFI"), "EFI/BOOT/BOOTX64.EFI");
         _ = wf.addCopyFile(limine_bootloader_pkg.path("BOOTIA32.EFI"), "EFI/BOOT/BOOTIA32.EFI");
-    } 
+    }
 
     const xor_step = xorrisoStep(b, wf, "kernel.iso");
     xor_step.step.step.dependOn(&limine_make.step);
@@ -237,5 +239,5 @@ fn xorrisoStep(
     // output file
     step.addArg("-o");
 
-    return .{.step = step, .path = step.addOutputFileArg(outputIso)};
+    return .{ .step = step, .path = step.addOutputFileArg(outputIso) };
 }

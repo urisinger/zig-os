@@ -5,7 +5,7 @@ const cpu = @import("../cpu.zig");
 
 const syscalls = @import("../syscalls.zig");
 
-var syscall_table: [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.SysV) u64 = [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.SysV) u64{
+var syscall_table: [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.x86_64_sysv) u64 = [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.SysV) u64{
     &syscalls.testSyscall,
     &syscalls.testSyscall,
     &syscalls.testSyscall,
@@ -14,11 +14,11 @@ var syscall_table: [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.SysV) 
 export const syscall_table_ptr: [*]?*const fn (u64, u64, u64, u64, u64, u64) u64 = @ptrCast(&syscall_table[0]);
 export const syscall_table_len = syscall_table.len;
 
-export fn fallback_syscall() callconv(.C) u64 {
+export fn fallback_syscall() callconv(.c) u64 {
     return 0xFFFFFFFFFFFFFFFF;
 }
 
-pub fn syscall_handler() callconv(.Naked) void {
+pub fn syscall_handler() callconv(.naked) void {
     asm volatile (
         \\ swapgs
         \\ mov %rsp, %gs:16 // store user stack pointer
