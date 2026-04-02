@@ -1,63 +1,47 @@
 const std = @import("std");
 const log = std.log.scoped(.main);
 
-const logger = @import("logger.zig");
+// Export modules for the rest of the kernel to use via @import("root")
+pub const common = @import("common/mod.zig");
+pub const arch = @import("arch/x86_64/mod.zig");
+pub const mem = @import("mem/mod.zig");
+pub const dev = @import("dev/mod.zig");
+pub const tasking = @import("tasking/mod.zig");
+pub const core = @import("core/mod.zig");
 
-const utils = @import("utils.zig");
-pub const panic = logger.panic_handler;
+const klog = core.klog;
+const boot = core.boot;
+const per_cpu = arch.per_cpu;
+const syscall = arch.idt.syscall;
+const gdt = arch.gdt;
+const idt = arch.idt.idt;
+const apic = arch.apic;
+const cpu = arch.cpu;
+const kheap = mem.kernel.heap;
+const framebuffer = dev.display.framebuffer;
+const console = dev.display.console;
+const ps2 = dev.ps2;
+const keyboard = dev.keyboard;
+const scheduler = tasking.scheduler;
+const elf = tasking.exec.elf;
 
-const boot = @import("boot.zig");
-
-const kheap = @import("memory/kernel/heap.zig");
-const idt = @import("idt/idt.zig");
-
-const apic = @import("apic/mod.zig");
-
-const cpu = @import("cpu.zig");
-
-pub const os = @import("os.zig");
-
-const framebuffer = @import("display/framebuffer.zig");
-const console = @import("display/console.zig");
-const ps2 = @import("drivers/ps2.zig");
-
-const ps2_keyboard = @import("drivers/keyboard/ps2.zig");
-
-const gdt = @import("gdt.zig");
-
-const scheduler = @import("scheduler/scheduler.zig");
-
-const core = @import("core.zig");
+pub const panic = klog.panic_handler;
+pub const os = core.os;
 
 const elf_code align(@alignOf(std.elf.Elf64_Ehdr)) = @embedFile("user_elf").*;
-const elf = @import("exec/elf.zig");
-const syscall = @import("idt/syscall.zig");
 
 pub const std_options: std.Options = .{
-    .logFn = logger.logFn,
+    .logFn = klog.logFn,
     .log_level = .debug,
-    .page_size_max = utils.PAGE_SIZE,
-    .page_size_min = utils.PAGE_SIZE,
+    .page_size_max = common.utils.PAGE_SIZE,
+    .page_size_min = common.utils.PAGE_SIZE,
 };
-
-const entry_code = [_]u8{
-    0x0F, 0x05, // pause
-    0xeb, 0xfc, // jmp $-3
-};
-
-export fn _start() callconv(.c) noreturn {
-    asm volatile (
-        \\ cli
-        \\ xor %rbp, %rbp
-        \\ call kmain
-        \\ ud2
-    );
-    unreachable;
-}
 
 export fn kmain() noreturn {
     framebuffer.init();
-    logger.init();
+    klog.init();
+
+
 
     boot.init();
 
@@ -67,14 +51,14 @@ export fn kmain() noreturn {
 
     kheap.init();
 
-    core.init();
+    arch.init(); // per_cpu init
     console.init();
 
     apic.configureLocalApic() catch @panic("failed to init apic");
 
     ps2.init() catch @panic("failed to initilize ps2");
 
-    ps2_keyboard.init() catch |err| {
+    keyboard.ps2.init() catch |err| {
         log.err("Failed to initialize PS/2 keyboard: {}", .{err});
         @panic("PS/2 keyboard init failed");
     };
@@ -89,3 +73,10 @@ export fn kmain() noreturn {
 
     scheduler.start();
 }
+
+pub export fn _start() callconv(.c) noreturn {
+    arch.entry();
+    unreachable;
+}
+
+

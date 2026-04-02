@@ -1,42 +1,185 @@
 const std = @import("std");
 
-const Opts = struct {
-    arch: std.Target.Cpu.Arch,
-    ovmf_fd: []const u8,
-    uefi: bool,
-    qemu: bool,
-    debug: u2,
+pub fn build(b: *std.Build) !void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
 
-    display: bool,
-};
-
-fn options(b: *std.Build) Opts {
-    return .{
-        .arch = b.option(std.Target.Cpu.Arch, "arch", "The target kernel architecture") orelse .x86_64,
-        .ovmf_fd = b.option([]const u8, "ovmf", "OVMF.fd path") orelse b: {
-            break :b (std.process.getEnvVarOwned(b.allocator, "OVMF_FD")) catch {
-                break :b "/usr/share/ovmf/x64/OVMF.4m.fd";
-            };
-        },
-        .uefi = b.option(bool, "uefi", "use UEFI to boot in QEMU (default: true)") orelse
-            true,
-
-        .qemu = b.option(bool, "qemu", "run QEMU") orelse false,
-        .debug = b.option(u2, "debug", "QEMU debug level") orelse
-            1,
-        .display = b.option(bool, "display", "QEMU gui true/false") orelse
-            true,
+    // Options
+    const arch = b.option(std.Target.Cpu.Arch, "arch", "The target architecture") orelse .x86_64;
+    const uefi = b.option(bool, "uefi", "Use UEFI to boot") orelse true;
+    const ovmf_fd = b.option([]const u8, "ovmf", "OVMF.fd path") orelse b: {
+        break :b (std.process.getEnvVarOwned(b.allocator, "OVMF_FD")) catch {
+            break :b "/usr/share/ovmf/x64/OVMF.4m.fd";
+        };
     };
+
+    const qemu_gui = b.option(bool, "gui", "Enable QEMU GUI") orelse true;
+    const qemu_debug_level = b.option(u2, "debug-level", "QEMU debug level (0-3)") orelse 1;
+    const qemu_monitor = b.option(bool, "monitor", "Enable QEMU monitor via unix socket") orelse false;
+    const qemu_extra_args = b.option([]const u8, "qemu-args", "Extra arguments to pass to QEMU") orelse "";
+
+    // Target configuration (Freestanding OS)
+    const kernel_target = b.resolveTargetQuery(getTarget(arch));
+
+    // 1. Build User Space ELF
+    const user_elf = b.addExecutable(.{
+        .name = "user_elf",
+        .use_llvm = true,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/user/main.zig"),
+            .target = kernel_target,
+            .optimize = optimize,
+        }),
+    });
+
+    // 2. Build Kernel ELF
+    var code_model: std.builtin.CodeModel = .default;
+    if (arch == .x86_64) {
+        code_model = .kernel;
+    }
+
+    const kernel = b.addExecutable(.{
+        .name = "kernel",
+        .use_llvm = true,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/kernel/main.zig"),
+            .target = kernel_target,
+            .optimize = optimize,
+            .code_model = code_model,
+        }),
+    });
+
+    kernel.setLinkerScript(getLinkerScript(b, arch));
+    kernel.want_lto = false;
+
+    // Imports
+    const limine = b.dependency("limine", .{});
+    kernel.root_module.addImport("limine", limine.module("limine"));
+
+    const user_module = b.createModule(.{
+        .root_source_file = user_elf.getEmittedBin(),
+    });
+    kernel.root_module.addImport("user_elf", user_module);
+
+    // Install artifacts
+    b.installArtifact(kernel);
+    b.installArtifact(user_elf);
+
+    // 3. Create ISO
+    const iso_step = createIso(b, kernel.getEmittedBin(), uefi);
+
+    const iso_install = b.addInstallFile(iso_step.path, "kernel.iso");
+    b.getInstallStep().dependOn(&iso_install.step);
+
+    // 4. Run Step
+    const run_step = b.step("run", "Run the OS in QEMU");
+    const qemu_run_cmd = createQemuCommand(b, arch, iso_install, uefi, ovmf_fd, qemu_gui, qemu_debug_level, qemu_monitor, qemu_extra_args, false);
+    run_step.dependOn(&qemu_run_cmd.step);
+
+    // 5. Debug Step (QEMU with GDB server)
+    const debug_step = b.step("debug", "Run the OS in QEMU with GDB server (-S -s)");
+    const qemu_debug_cmd = createQemuCommand(b, arch, iso_install, uefi, ovmf_fd, qemu_gui, qemu_debug_level, qemu_monitor, qemu_extra_args, true);
+    debug_step.dependOn(&qemu_debug_cmd.step);
+
+    // 6. GDB Step (GDB client)
+    const gdb_step = b.step("gdb", "Run GDB client");
+    const gdb_cmd = b.addSystemCommand(&.{"gdb"});
+
+    // Add the kernel executable as the primary file for symbols
+    gdb_cmd.addArtifactArg(kernel);
+
+    // Add the commands to connect to the QEMU GDB stub
+    gdb_cmd.addArgs(&.{
+        "-ex", "target remote localhost:1234",
+        // Optional: layout src is great for seeing code while debugging
+        "-ex", "layout src",
+    });
+
+    gdb_step.dependOn(&gdb_cmd.step);
+    // Ensure the kernel is actually built before GDB tries to open it
+    gdb_step.dependOn(b.getInstallStep());
+
+    // 7. Test Step
+    const test_step = b.step("test", "Run unit tests");
+    const tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/kernel/common/bitmap_test.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_tests = b.addRunArtifact(tests);
+    test_step.dependOn(&run_tests.step);
 }
 
-pub fn build(b: *std.Build) !void {
-    const opts = options(b);
+fn createQemuCommand(
+    b: *std.Build,
+    arch: std.Target.Cpu.Arch,
+    iso_install: *std.Build.Step.InstallFile,
+    uefi: bool,
+    ovmf_fd: []const u8,
+    gui: bool,
+    debug_level: u2,
+    monitor: bool,
+    extra_args: []const u8,
+    gdb_server: bool,
+) *std.Build.Step.Run {
+    const qemu_bin = switch (arch) {
+        .x86_64 => "qemu-system-x86_64",
+        .aarch64 => "qemu-system-aarch64",
+        .riscv64 => "qemu-system-riscv64",
+        else => std.debug.panic("Unsupported architecture for QEMU: {s}", .{@tagName(arch)}),
+    };
 
-    const target = b.resolveTargetQuery(getTarget(opts.arch));
+    const qemu_cmd = b.addSystemCommand(&.{qemu_bin});
+    qemu_cmd.step.dependOn(&iso_install.step);
 
-    const kernel = createKernelElf(b, &opts, target);
-    const iso = createIso(b, kernel.getEmittedBin(), opts.uefi);
-    _ = runQemu(b, &opts, iso.path);
+    qemu_cmd.addArgs(&.{
+        "-machine", "q35",
+        "-m",       "2G",
+        "-serial",  "stdio",
+        "-device",  "isa-debug-exit,iobase=0x501,iosize=0x04",
+    });
+
+    if (monitor) {
+        qemu_cmd.addArgs(&.{ "-monitor", "unix:qemu-monitor.sock,server,nowait" });
+    }
+
+    const iso_path = b.getInstallPath(.prefix, iso_install.dest_rel_path);
+    qemu_cmd.addArg("-drive");
+    qemu_cmd.addArg(b.fmt("format=raw,file={s}", .{iso_path}));
+
+    if (!gui) {
+        qemu_cmd.addArgs(&.{ "-display", "none" });
+    } else {
+        qemu_cmd.addArgs(&.{ "-display", "gtk,show-cursor=off" });
+    }
+
+    switch (debug_level) {
+        0 => {},
+        1 => qemu_cmd.addArgs(&.{ "-d", "guest_errors" }),
+        2 => qemu_cmd.addArgs(&.{ "-d", "cpu_reset,guest_errors" }),
+        3 => qemu_cmd.addArgs(&.{ "-d", "int,cpu_reset,guest_errors" }),
+    }
+
+    if (uefi) {
+        qemu_cmd.addArgs(&.{ "-bios", ovmf_fd });
+    }
+
+    if (gdb_server) {
+        qemu_cmd.addArgs(&.{ "-S", "-s" });
+    }
+
+    if (extra_args.len > 0) {
+        var it = std.mem.tokenizeAny(u8, extra_args, " ");
+        while (it.next()) |arg| {
+            qemu_cmd.addArg(arg);
+        }
+    }
+    // Treat exit code 33 (from shutdownSuccess) as a successful run.
+    qemu_cmd.expectExitCode(33);
+
+    return qemu_cmd;
 }
 
 fn getTarget(arch: std.Target.Cpu.Arch) std.Target.Query {
@@ -75,51 +218,6 @@ fn getTarget(arch: std.Target.Cpu.Arch) std.Target.Query {
     };
 }
 
-fn createKernelElf(b: *std.Build, opts: *const Opts, target: std.Build.ResolvedTarget) *std.Build.Step.Compile {
-    const linker_script = getLinkerScript(b, opts.arch);
-
-    var code_model: std.builtin.CodeModel = .default;
-    if (opts.arch == .x86_64) {
-        code_model = .kernel;
-    }
-
-    const optimize = b.standardOptimizeOption(.{});
-
-    const user = b.addExecutable(.{
-        .name = "user_elf",
-        .use_llvm = true,
-        .root_module = b.addModule("user", .{
-            .root_source_file = b.path("src/user/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .code_model = .default,
-        }),
-    });
-
-    const kernel = b.addExecutable(.{
-        .name = "kernel",
-        .use_llvm = true,
-        .root_module = b.addModule("kernel", .{
-            .root_source_file = b.path("src/kernel/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .code_model = code_model,
-        }),
-    });
-
-    kernel.setLinkerScript(linker_script);
-    kernel.want_lto = false;
-    const user_module = b.createModule(.{ .root_source_file = user.getEmittedBin() });
-
-    const limine = b.dependency("limine", .{});
-    kernel.root_module.addImport("limine", limine.module("limine"));
-    kernel.root_module.addImport("user_elf", user_module);
-
-    kernel.step.dependOn(&user.step);
-
-    return kernel;
-}
-
 fn getLinkerScript(b: *std.Build, arch: std.Target.Cpu.Arch) std.Build.LazyPath {
     return switch (arch) {
         .x86_64 => b.path("linker-x86_64.ld"),
@@ -127,50 +225,6 @@ fn getLinkerScript(b: *std.Build, arch: std.Target.Cpu.Arch) std.Build.LazyPath 
         .riscv64 => b.path("linker-riscv64.ld"),
         else => std.debug.panic("Unsupported architecture: {s}", .{@tagName(arch)}),
     };
-}
-
-fn runQemu(b: *std.Build, opts: *const Opts, os_iso: std.Build.LazyPath) *std.Build.Step.Run {
-    const qemu_step = b.addSystemCommand(&.{
-        "qemu-system-x86_64",
-        "-machine",
-        "q35",
-        "-m",
-        "2G",
-        "-serial",
-        "stdio",
-        "-drive",
-    });
-
-    qemu_step.addPrefixedFileArg("format=raw,file=", os_iso);
-
-    if (opts.display) {
-        qemu_step.addArgs(&.{
-            "-display",
-            "gtk,show-cursor=off",
-        });
-    } else {
-        qemu_step.addArgs(&.{
-            "-display",
-            "none",
-        });
-    }
-
-    switch (opts.debug) {
-        0 => {},
-        1 => qemu_step.addArgs(&.{ "-d", "guest_errors" }),
-        2 => qemu_step.addArgs(&.{ "-d", "cpu_reset,guest_errors" }),
-        3 => qemu_step.addArgs(&.{ "-d", "int,cpu_reset,guest_errors" }),
-    }
-
-    if (opts.uefi) {
-        const ovmf_fd = opts.ovmf_fd;
-        qemu_step.addArgs(&.{ "-bios", ovmf_fd });
-    }
-
-    const run_step = b.step("run", "Run in QEMU");
-    run_step.dependOn(&qemu_step.step);
-    run_step.dependOn(b.getInstallStep());
-    return qemu_step;
 }
 
 const OutputStep = struct {
@@ -186,7 +240,7 @@ fn createIso(b: *std.Build, kernel_elf: std.Build.LazyPath, uefi: bool) OutputSt
     });
     limine_make.addDirectoryArg(limine_bootloader_pkg.path("."));
 
-    const wf = b.addNamedWriteFiles("create virtual iso root");
+    const wf = b.addNamedWriteFiles("iso_root");
     _ = wf.addCopyFile(kernel_elf, "boot/kernel");
     _ = wf.addCopyFile(b.path("limine.conf"), "boot/limine/limine.conf");
     _ = wf.addCopyFile(limine_bootloader_pkg.path("limine-bios.sys"), "boot/limine/limine-bios.sys");
@@ -197,47 +251,37 @@ fn createIso(b: *std.Build, kernel_elf: std.Build.LazyPath, uefi: bool) OutputSt
         _ = wf.addCopyFile(limine_bootloader_pkg.path("BOOTIA32.EFI"), "EFI/BOOT/BOOTIA32.EFI");
     }
 
-    const xor_step = xorrisoStep(b, wf, "kernel.iso");
-    xor_step.step.step.dependOn(&limine_make.step);
-    xor_step.step.step.dependOn(&wf.step);
-
-    return xor_step;
-}
-
-fn xorrisoStep(
-    b: *std.Build,
-    isoRoot: *std.Build.Step.WriteFile,
-    outputIso: []const u8,
-) OutputStep {
-    const step = b.addSystemCommand(&.{"xorriso"});
-    step.step.dependOn(&isoRoot.step);
+    const xor_step = b.addSystemCommand(&.{"xorriso"});
+    xor_step.step.dependOn(&limine_make.step);
+    xor_step.step.dependOn(&wf.step);
 
     // mkisofs mode
-    step.addArg("-as");
-    step.addArg("mkisofs");
+    xor_step.addArg("-as");
+    xor_step.addArg("mkisofs");
 
     // BIOS boot image inside iso
-    step.addArg("-b");
-    step.addArg("boot/limine/limine-bios-cd.bin");
-    step.addArg("-no-emul-boot");
-    step.addArg("-boot-load-size");
-    step.addArg("4");
-    step.addArg("-boot-info-table");
+    xor_step.addArg("-b");
+    xor_step.addArg("boot/limine/limine-bios-cd.bin");
+    xor_step.addArg("-no-emul-boot");
+    xor_step.addArg("-boot-load-size");
+    xor_step.addArg("4");
+    xor_step.addArg("-boot-info-table");
 
     // UEFI boot image
-    step.addArg("--efi-boot");
-    step.addArg("boot/limine/limine-uefi-cd.bin");
-    step.addArg("-efi-boot-part");
-    step.addArg("--efi-boot-image");
+    xor_step.addArg("--efi-boot");
+    xor_step.addArg("boot/limine/limine-uefi-cd.bin");
+    xor_step.addArg("-efi-boot-part");
+    xor_step.addArg("--efi-boot-image");
 
     // protective label
-    step.addArg("--protective-msdos-label");
+    xor_step.addArg("--protective-msdos-label");
 
     // input directory (our staged iso_root)
-    step.addDirectoryArg(isoRoot.getDirectory());
+    xor_step.addDirectoryArg(wf.getDirectory());
 
     // output file
-    step.addArg("-o");
+    xor_step.addArg("-o");
+    const iso_path = xor_step.addOutputFileArg("kernel.iso");
 
-    return .{ .step = step, .path = step.addOutputFileArg(outputIso) };
+    return .{ .step = xor_step, .path = iso_path };
 }
