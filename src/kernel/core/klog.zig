@@ -209,14 +209,14 @@ const SourceFile = struct {
         for (paths, 0..) |path, i| {
             files[i] = .{
                 .path = path,
-                .contents = @embedFile(path),
+                .contents = @embedFile("../" ++ path),
             };
         }
         return files;
     }
 };
 
-const source_files: []const SourceFile = &SourceFile.open(&.{"../common/utils.zig"});
+const source_files: []const SourceFile = &SourceFile.open(@import("config").sources);
 
 fn getSelfDwarf(allocator: std.mem.Allocator) !std.debug.Dwarf {
     if (!conf.STACK_TRACE) return error.StackTracesDisabled;

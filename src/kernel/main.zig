@@ -45,13 +45,16 @@ export fn kmain() noreturn {
 
     boot.init();
 
+
     gdt.init();
 
     idt.init();
 
+    arch.init(); // per_cpu init
+
     kheap.init();
 
-    arch.init(); // per_cpu init
+
     console.init();
 
     apic.configureLocalApic() catch @panic("failed to init apic");

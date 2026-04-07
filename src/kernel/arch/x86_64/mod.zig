@@ -16,7 +16,7 @@ pub const jumpToUserMode = scheduler.jumpToUserMode;
 pub const writeRedirEntry = apic.writeRedirEntry;
 pub const registerInterrupt = idt.idt.registerInterrupt;
 
-pub fn entry() void {
+pub inline fn entry() void {
     asm volatile (
         \\ cli
         \\ xor %rbp, %rbp
