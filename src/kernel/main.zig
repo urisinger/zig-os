@@ -11,12 +11,12 @@ pub const core = @import("core/mod.zig");
 
 const klog = core.klog;
 const boot = core.boot;
-const per_cpu = arch.per_cpu;
+const pcpu = arch.pcpu;
 const syscall = arch.idt.syscall;
 const gdt = arch.gdt;
-const idt = arch.idt.idt;
+const idt = arch.idt.table;
 const apic = arch.apic;
-const cpu = arch.cpu;
+const istr = arch.istr;
 const kheap = mem.kernel.heap;
 const framebuffer = dev.display.framebuffer;
 const console = dev.display.console;

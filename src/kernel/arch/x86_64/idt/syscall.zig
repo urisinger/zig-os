@@ -2,7 +2,7 @@ const std = @import("std");
 const root = @import("root");
 const log = std.log.scoped(.syscall);
 
-const cpu = @import("../cpu.zig");
+const instr = @import("../instr.zig");
 
 const core = root.core;
 const syscalls = core.syscall;
@@ -65,8 +65,8 @@ pub fn init() void {
     const EFER_SCE: u64 = 1;
 
     // Enable syscall/sysret
-    cpu.writeMsr(MSR_EFER, cpu.readMsr(MSR_EFER) | EFER_SCE);
-    cpu.writeMsr(MSR_LSTAR, @intFromPtr(&syscall_handler));
-    cpu.writeMsr(MSR_STAR, 0x13 << 48 | 0x8 << 32); // Kernel CS/SS = 0x08, user = 0x1B
-    cpu.writeMsr(MSR_FMASK, 0x300); // Disable IF and TF during syscall
+    instr.writeMsr(MSR_EFER, instr.readMsr(MSR_EFER) | EFER_SCE);
+    instr.writeMsr(MSR_LSTAR, @intFromPtr(&syscall_handler));
+    instr.writeMsr(MSR_STAR, 0x13 << 48 | 0x8 << 32); // Kernel CS/SS = 0x08, user = 0x1B
+    instr.writeMsr(MSR_FMASK, 0x300); // Disable IF and TF during syscall
 }

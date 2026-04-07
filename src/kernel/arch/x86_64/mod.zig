@@ -1,20 +1,20 @@
-pub const cpu = @import("cpu.zig");
+pub const instr = @import("instr.zig");
 pub const gdt = @import("gdt.zig");
 pub const tss = @import("tss.zig");
 pub const apic = @import("apic/mod.zig");
 pub const idt = @import("idt/mod.zig");
-pub const per_cpu = @import("per_cpu.zig");
-pub const scheduler = @import("scheduler.zig");
+pub const pcpu = @import("pcpu.zig");
+pub const context = @import("context.zig");
 
 // Generic Architecture API
-pub const init = per_cpu.init;
-pub const getContext = per_cpu.context;
-pub const halt = cpu.halt;
-pub const shutdown = cpu.shutdown;
-pub const shutdownSuccess = cpu.shutdownSuccess;
-pub const jumpToUserMode = scheduler.jumpToUserMode;
+pub const init = pcpu.init;
+pub const getContext = pcpu.context;
+pub const halt = instr.halt;
+pub const shutdown = instr.shutdown;
+pub const shutdownSuccess = instr.shutdownSuccess;
 pub const writeRedirEntry = apic.writeRedirEntry;
-pub const registerInterrupt = idt.idt.registerInterrupt;
+pub const registerInterrupt = idt.table.registerInterrupt;
+pub const jumpToUserMode = context.jumpToUserMode;
 
 pub inline fn entry() void {
     asm volatile (

@@ -4,7 +4,7 @@ const utf16 = std.unicode.utf8ToUtf16LeStringLiteral;
 
 const root = @import("root");
 const arch = root.arch;
-const cpu = arch.cpu;
+const instr = arch.instr;
 
 const dev = root.dev;
 const serial = dev.serial;
@@ -77,7 +77,7 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.enum_litera
 pub fn panic_handler(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
     panic(msg);
 
-    cpu.shutdown();
+    instr.shutdown();
 }
 
 pub fn panic(msg: []const u8) void {

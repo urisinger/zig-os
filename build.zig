@@ -20,27 +20,31 @@ pub fn build(b: *std.Build) !void {
     const kernel_target = b.resolveTargetQuery(targets.get(arch));
 
     // --- 2. Build User Space ELF ---
+    const user_module = b.createModule(.{
+        .root_source_file = b.path("src/user/main.zig"),
+        .target = kernel_target,
+        .optimize = optimize,
+    });
+
     const user_elf = b.addExecutable(.{
         .name = "user_elf",
         .use_llvm = true,
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/user/main.zig"),
-            .target = kernel_target,
-            .optimize = optimize,
-        }),
+        .root_module = user_module,
     });
     b.installArtifact(user_elf);
 
     // --- 3. Build Kernel ELF ---
+    const kernel_module = b.createModule(.{
+        .root_source_file = b.path("src/kernel/main.zig"),
+        .target = kernel_target,
+        .optimize = optimize,
+        .code_model = if (arch == .x86_64) .kernel else .default,
+    });
+
     const kernel = b.addExecutable(.{
         .name = "kernel",
         .use_llvm = true,
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/kernel/main.zig"),
-            .target = kernel_target,
-            .optimize = optimize,
-            .code_model = if (arch == .x86_64) .kernel else .default,
-        }),
+        .root_module = kernel_module,
     });
     
     kernel.setLinkerScript(targets.getLinkerScript(b, arch));
@@ -54,16 +58,35 @@ pub fn build(b: *std.Build) !void {
     config.addOption([]const []const u8, "sources", try utils.getKernelSources(b));
     kernel.root_module.addOptions("config", config);
 
-    const user_module = b.createModule(.{ .root_source_file = user_elf.getEmittedBin() });
-    kernel.root_module.addImport("user_elf", user_module);
+    const user_elf_bin_module = b.createModule(.{ .root_source_file = user_elf.getEmittedBin() });
+    kernel.root_module.addImport("user_elf", user_elf_bin_module);
     
     b.installArtifact(kernel);
 
-    // --- 4. Create ISO ---
+    // --- 4. Check Step (ZLS) ---
+    const check_step = b.step("check", "Check if the project compiles");
+    
+    const user_elf_check = b.addExecutable(.{
+        .name = "user_elf",
+        .root_module = user_module,
+    });
+    check_step.dependOn(&user_elf_check.step);
+
+    const kernel_check = b.addExecutable(.{
+        .name = "kernel",
+        .root_module = kernel_module,
+    });
+    kernel_check.setLinkerScript(targets.getLinkerScript(b, arch));
+    kernel_check.root_module.addImport("limine", limine.module("limine"));
+    kernel_check.root_module.addOptions("config", config);
+    kernel_check.root_module.addImport("user_elf", user_elf_bin_module);
+    
+    check_step.dependOn(&kernel_check.step);
+
+    // --- 5. Create ISO ---
     const iso_step = iso.create(b, kernel.getEmittedBin(), uefi);
     const iso_install = b.addInstallFile(iso_step.path, "kernel.iso");
     
-    // Explicitly link the ISO generation to the kernel compilation to help caching
     iso_step.step.step.dependOn(&kernel.step); 
     b.getInstallStep().dependOn(&iso_install.step);
 

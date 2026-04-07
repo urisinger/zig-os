@@ -12,7 +12,7 @@ const core = root.core;
 const boot = core.boot;
 
 const arch = root.arch;
-const cpu = arch.cpu;
+const istr = arch.istr;
 
 const dev = root.dev;
 const framebuffer = dev.display.framebuffer;

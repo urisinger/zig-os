@@ -20,7 +20,7 @@ const kheap = mem.kernel.heap;
 const paging = mem.kernel.paging;
 const uheap = mem.user.heap;
 const arch = root.arch;
-const idt = arch.idt.idt;
+const context = arch.context;
 const Elf64_Phdr = elf.Elf64_Phdr;
 const Elf32_Phdr = elf.Elf32_Phdr;
 
@@ -37,9 +37,9 @@ pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8) !*Task {
     const kernel_stack = try pmm.allocatePageBlock(2, .@"1") + globals.hhdm_offset;
 
     const kernel_stack_top = kernel_stack + 2 * utils.PAGE_SIZE;
-    const context_ptr: *idt.Context = @ptrFromInt(kernel_stack_top - @sizeOf(idt.Context));
+    const context_ptr: *context.Context = @ptrFromInt(kernel_stack_top - @sizeOf(context.Context));
 
-    context_ptr.* = idt.Context{
+    context_ptr.* = context.Context{
         .registers = .{},
         .interrupt_num = 0,
         .error_code = 0,

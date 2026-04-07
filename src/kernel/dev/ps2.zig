@@ -3,9 +3,9 @@ const log = std.log.scoped(.ps2);
 
 const root = @import("root");
 const arch = root.arch;
-const cpu = arch.cpu;
-const outb = cpu.outb;
-const inb = cpu.inb;
+const instr = arch.instr;
+const outb = instr.outb;
+const inb = instr.inb;
 
 const PS2_COMMAND = 0x64;
 const PS2_DATA = 0x60;

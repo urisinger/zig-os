@@ -5,7 +5,7 @@ const elf = @import("exec/elf.zig");
 
 const arch = root.arch;
 const tss = arch.tss;
-const idt = arch.idt.idt;
+const Context = arch.context.Context;
 
 const mem = root.mem;
 const page_table = mem.page_table;
@@ -19,7 +19,7 @@ const uheap = mem.user.heap;
 const globals = root.common.globals;
 
 pub const Task = struct {
-    context: *idt.Context,
+    context: *Context,
     pml4: *page_table.PageMapping,
     vma: VmaAllocator,
     kernel_stack: u64,
@@ -33,17 +33,17 @@ pub const TaskQueueEntry = struct {
 
 pub const Scheduler = struct { task_qeueue: ?*TaskQueueEntry };
 
-pub fn saveContext(constext: *idt.Context) void {
+pub fn saveContext(constext: *Context) void {
     const scheduler = arch.getContext().scheduler;
     const cur_task = scheduler.task_qeueue.?;
     cur_task.task.context = constext;
 }
 
-pub fn schedulerTick() callconv(.{ .x86_64_sysv = .{}}) *idt.Context {
+pub fn schedulerTick() callconv(.{ .x86_64_sysv = .{}}) *Context {
     return nextTask();
 }
 
-fn nextTask() *idt.Context {
+fn nextTask() *Context {
     const context = arch.getContext();
     const scheduler = &context.scheduler;
     const current_task = scheduler.task_qeueue.?;
@@ -57,7 +57,7 @@ fn nextTask() *idt.Context {
     tss.set_rsp(next_task.task.kernel_stack);
     const pml4 = next_task.task.pml4;
 
-    arch.cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
+    arch.instr.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
     context.kernel_stack = next_task.task.kernel_stack;
     context.current_task = next_task.task;
@@ -94,11 +94,11 @@ pub fn start() noreturn {
     const task = current_task.task;
 
     tss.set_rsp(task.kernel_stack);
-    arch.cpu.ltr(0x28);
+    arch.instr.ltr(0x28);
 
-    arch.cpu.setCr3(@intFromPtr(task.pml4) - globals.hhdm_offset);
+    arch.instr.setCr3(@intFromPtr(task.pml4) - globals.hhdm_offset);
 
-    const context: *idt.Context = @ptrFromInt(task.kernel_stack - @sizeOf(idt.Context));
+    const context: *Context = @ptrFromInt(task.kernel_stack - @sizeOf(Context));
 
     log.info("starting scheduler", .{});
     arch.jumpToUserMode(context);

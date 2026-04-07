@@ -3,7 +3,7 @@ const log = std.log.scoped(.apic);
 
 const root = @import("root");
 const arch = root.arch;
-const cpu = root.arch.cpu;
+const instr = root.arch.instr;
 const common = root.common;
 const globals = common.globals;
 
@@ -64,9 +64,9 @@ var apicBase: ?[*]volatile u32 = null;
 var ioApicBase: ?[*]volatile u32 = null;
 
 pub fn enableLocalApic() !void {
-    var base = cpu.readMsr(IA32_APIC_BASE);
+    var base = instr.readMsr(IA32_APIC_BASE);
     base |= APIC_ENABLE_BIT;
-    cpu.writeMsr(IA32_APIC_BASE, base);
+    instr.writeMsr(IA32_APIC_BASE, base);
     const apic_page_addr = (base & APIC_BASE_MASK) | APIC_BASE_TOP;
     const apic_vaddr = apic_page_addr + globals.hhdm_offset;
 
@@ -127,8 +127,8 @@ pub fn configureLocalApic() !void {
     try enableLocalApic();
 
     // Disable legacy PIC interrupts by masking all interrupts (0xFF) on both PICs (master/slave)
-    cpu.outb(0xA1, 0xff); // Slave PIC
-    cpu.outb(0x21, 0xff); // Master PIC
+    instr.outb(0xA1, 0xff); // Slave PIC
+    instr.outb(0x21, 0xff); // Master PIC
 
     // Set the Spurious Interrupt Vector Register to vector 0xFF with the APIC software enable bit (bit 8)
     writeRegister(SPURIOUS_INTERRUPT_REGISTER, 0x100 | 0xFF);

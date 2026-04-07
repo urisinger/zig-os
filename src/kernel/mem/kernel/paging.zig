@@ -12,7 +12,7 @@ const utils = common.utils;
 const core = root.core;
 const boot = core.boot;
 const arch = root.arch;
-const cpu = arch.cpu;
+const instr = arch.instr;
 
 const std = @import("std");
 const log = std.log.scoped(.kpaging);
@@ -99,7 +99,7 @@ pub fn init() Error!void {
 
     try mapAllMemory(pml4);
 
-    cpu.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
+    instr.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
     base_kernel_pml4 = pml4;
 

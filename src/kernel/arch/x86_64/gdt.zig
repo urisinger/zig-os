@@ -1,4 +1,4 @@
-const cpu = @import("cpu.zig");
+const instr = @import("instr.zig");
 const tss = @import("tss.zig");
 
 pub var table = [_]GdtEntry{
@@ -142,5 +142,5 @@ pub const GdtDescriptor = packed struct {
 };
 
 pub fn load(gdtr: *const GdtDescriptor) void {
-    cpu.lgdt(@intFromPtr(gdtr));
+    instr.lgdt(@intFromPtr(gdtr));
 }

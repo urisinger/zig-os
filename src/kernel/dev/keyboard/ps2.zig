@@ -28,16 +28,15 @@ pub fn init() !void {
 
     arch.registerInterrupt(0x20, irq, .int, .user);
     arch.writeRedirEntry(0x1, .{
-        .vector = 0x20, // Interrupt vector number
-        .delivery_mode = .Fixed, // Fixed delivery mode (normal interrupt)
-        .destination_mode = .Physical, // Physical destination mode
-        .pin_polarity = 0, // Active high
-        .remote_IRR = 0, // Initially 0 (not pending)
-        .trigger_mode = 1, // Level-triggered
-        .mask = 0, // Unmasked (enabled)
+        .vector = 0x20,
+        .delivery_mode = .Fixed,
+        .destination_mode = .Physical,
+        .pin_polarity = 0,
+        .remote_IRR = 0, 
+        .trigger_mode = 1,
+        .mask = 0,
         .destination = arch.getContext().apic_id, // Destination APIC ID (this processor)
     });
-    // Now that the keyboard is initialized and ready, enable IRQ1
     try ps2.enableInterrupt(1);
 }
 
@@ -61,7 +60,7 @@ pub const DriverState = struct {
 
 var keyboard_state = DriverState{};
 
-pub fn irq(ctx: *volatile arch.idt.idt.Context) void {
+pub fn irq(ctx: *volatile arch.context.Context) void {
     _ = ctx;
     const scancode = ps2.readData() catch {
         arch.apic.sendEoi();
