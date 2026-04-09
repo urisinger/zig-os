@@ -37,6 +37,8 @@ pub const Task = struct {
     }
 
     pub fn start(self: *Task) noreturn {
+
+        arch.instr.ltr(0x28);
         switch (self.kind) {
             .User => arch.jumpToUserTask(self.context),
             .Kernel => arch.jumpToKernelTask(self.context),
@@ -75,17 +77,26 @@ pub const Task = struct {
     }
 };
 
-pub fn kernelTaskTrampoline() noreturn {
-    // Get the current task from the architecture layer
-    const task = (arch.getContext().scheduler.currentTask() orelse unreachable).asKernel() orelse unreachable;
+pub export fn kernelTaskEntry() noreturn {
+    arch.instr.sti();
+    const core = arch.getContext();
+    const task = (core.scheduler.currentTask() orelse unreachable).asKernel() orelse unreachable;
 
-    // Call the real entry function
     const exit = task.entry(task.arg);
     std.log.debug("thread exited with exit code: {}", .{exit});
 
-    arch.getContext().scheduler.exitCurrentTask();
-
+    core.scheduler.exitCurrentTask();
     unreachable;
+}
+
+// The actual target of your context switch
+pub fn kernelTaskTrampoline() callconv(.naked) noreturn {
+    // 1. Ensure stack alignment (x86_64 ABI requires 16-byte alignment before a call)
+    // 2. Call the Zig logic function
+    asm volatile (
+        \\ xor %rbp, %rbp      # Clear frame pointer for clean backtraces
+        \\ call kernelTaskEntry
+    );
 }
 
 pub const UserTask = struct {

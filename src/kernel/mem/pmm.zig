@@ -164,6 +164,8 @@ pub fn init() !void {
         }
     }
 
+    bitmap.?.clear(0);
+
     // Finally, mark the bitmap region itself as used (0)
     bitmap.?.clearRange(bitmap_page, bitmap_page + bitmap_num_pages);
 

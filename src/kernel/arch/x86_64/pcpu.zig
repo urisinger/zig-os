@@ -20,6 +20,7 @@ pub inline fn context() *CoreContext {
     ));
 }
 
+const MSR_GS_BASE = 0xC0000101;
 const MSR_KERNEL_GS_BASE = 0xC0000102;
 
 var cpu_0_context: CoreContext = undefined;
@@ -28,6 +29,7 @@ pub fn init() void {
     cpu_0_context.self = &cpu_0_context;
 
     const core_ptr = @intFromPtr(&cpu_0_context);
+    instr.writeMsr(MSR_GS_BASE, core_ptr);
     instr.writeMsr(MSR_KERNEL_GS_BASE, core_ptr);
     asm volatile ("swapgs");
 }

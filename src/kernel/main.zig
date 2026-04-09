@@ -57,7 +57,7 @@ export fn kmain() noreturn {
 
     keyboard.Manager.init();
 
-        std.log.info("0x{x}, 0x{x}", .{@intFromPtr(mem.kernel.paging.base_kernel_pml4), common.globals.hhdm_offset});
+    std.log.info("0x{x}, 0x{x}", .{ @intFromPtr(mem.kernel.paging.base_kernel_pml4), common.globals.hhdm_offset });
 
     ps2.init() catch @panic("failed to initilize ps2");
 
@@ -82,10 +82,10 @@ export fn kmain() noreturn {
 
     const sched = &arch.pcpu.context().scheduler;
 
-    _ = sched.createKernelTask(0x1000, handler, 131) catch unreachable;
     const init_task = sched.createUserTask(2, 0x100) catch unreachable;
-    init_task.loadElf(&elf_code) catch unreachable;
 
+    _ = sched.createKernelTask(0x1000, handler, 131) catch unreachable;
+    init_task.loadElf(&elf_code) catch unreachable;
 
     sched.start();
 }

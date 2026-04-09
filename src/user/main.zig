@@ -1,14 +1,5 @@
 export fn _start() callconv(.naked) noreturn {
     while (true) {
-        _ = syscall(
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-        );
     }
 }
 

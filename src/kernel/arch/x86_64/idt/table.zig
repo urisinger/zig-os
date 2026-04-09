@@ -98,9 +98,13 @@ pub var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
 };
 
 export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{} }) ?*Context {
+    log.info("hi from there", .{});
     const scheduler = &arch.getContext().scheduler;
 
     scheduler.saveContext(context);
+
+
+    log.info("hi from there 0x{x}", .{context.interrupt_num});
     if (handlers[context.interrupt_num]) |handler| {
         handler(context);
     } else {
@@ -109,6 +113,8 @@ export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{} })
     }
 
     const next = scheduler.nextTask();
+
+    log.info("hi from hre", .{});
     return next;
 }
 

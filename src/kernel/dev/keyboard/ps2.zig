@@ -66,15 +66,18 @@ pub fn handleScancode(scancode: u8) ?keyboard.KeyEvent {
 
 pub fn irq(ctx: *volatile arch.context.Context) void {
     _ = ctx;
+    log.info("i am here", .{});
     const scancode = ps2.readData() catch {
         arch.apic.sendEoi();
         return;
     };
 
+    log.info("i am here too", .{});
     if (handleScancode(scancode)) |event| {
         keyboard.Manager.handleEvent(event);
     }
 
+    log.info("i am here three", .{});
 
     arch.apic.sendEoi();
 }

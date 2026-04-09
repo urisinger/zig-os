@@ -107,8 +107,6 @@ pub fn jumpToKernelTask(context: *const Context) noreturn {
 pub fn jumpToUserTask(context: *const Context) noreturn {
     const frame = &context.ret_frame;
     asm volatile (
-        \\ mov $0x28, %ax
-        \\ ltr %ax
         \\ swapgs
         \\ mov $0x1B, %ax
         \\ mov %ax, %ds
