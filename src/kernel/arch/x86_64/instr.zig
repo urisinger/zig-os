@@ -5,11 +5,11 @@ pub inline fn getCr3() u64 {
 }
 
 pub inline fn setCr3(pml4: u64) void {
+    @import("std").log.info("setting cr3 to 0x{x}", .{pml4});
     asm volatile ("mov %[pml4], %cr3"
         :
         : [pml4] "r" (pml4),
-        : .{ .memory = true }
-    );
+        : .{ .memory = true });
 }
 
 pub inline fn halt() noreturn {
@@ -25,6 +25,10 @@ pub inline fn shutdown() noreturn {
     halt();
 }
 
+pub inline fn int(comptime num: u8) void {
+    asm volatile (@import("std").fmt.comptimePrint("int ${}", .{num}));
+}
+
 pub inline fn shutdownSuccess() noreturn {
     // QEMU isa-debug-exit device (only works in QEMU)
     // Formula: (value << 1) | 1
@@ -37,16 +41,14 @@ pub inline fn lidt(idtr: u64) void {
     asm volatile ("lidt (%[idtr])"
         :
         : [idtr] "r" (idtr),
-        : .{ .memory = true }
-    );
+        : .{ .memory = true });
 }
 
 pub inline fn lgdt(gdtr: u64) void {
     asm volatile ("lgdt (%[gdtr])"
         :
         : [gdtr] "r" (gdtr),
-        : .{ .memory = true }
-    );
+        : .{ .memory = true });
 }
 
 pub inline fn getRsp() u64 {
@@ -59,8 +61,7 @@ pub inline fn ltr(selector: u16) void {
     asm volatile ("ltr %ax"
         :
         : [sel] "{ax}" (selector),
-        : .{ .memory = true }
-    );
+        : .{ .memory = true });
 }
 
 pub inline fn invlpg(page: u64) void {
@@ -68,8 +69,7 @@ pub inline fn invlpg(page: u64) void {
     asm volatile ("invlpg (%[addr])"
         :
         : [addr] "r" (ptr),
-        : .{ .memory = true }
-    );
+        : .{ .memory = true });
 }
 
 pub inline fn sti() void {
@@ -160,6 +160,5 @@ pub inline fn writeMsr(msr: u64, value: u64) void {
         : [msr] "{ecx}" (msr),
           [low] "{eax}" (@as(u32, @truncate(value))),
           [high] "{edx}" (@as(u32, @intCast(value >> 32))),
-        : .{ .memory = true }
-    );
+        : .{ .memory = true });
 }

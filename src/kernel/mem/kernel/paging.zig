@@ -51,7 +51,9 @@ pub fn createNewAddressSpace() !*PageMapping {
 }
 
 pub fn init() Error!void {
-    const pml4: *PageMapping = @ptrFromInt(try pmm.allocatePage() + globals.hhdm_offset);
+    const phys_pml4 = try pmm.allocatePage();
+    log.info("phys: 0x{x}", .{phys_pml4});
+    const pml4: *PageMapping = @ptrFromInt(phys_pml4 + globals.hhdm_offset);
 
     @memset(&pml4.mappings, @bitCast(@as(u64, 0)));
 

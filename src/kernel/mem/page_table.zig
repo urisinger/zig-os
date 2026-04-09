@@ -226,4 +226,26 @@ pub const PageMapping = extern struct {
 
         return @ptrFromInt(entry.get_addr() + globals.hhdm_offset);
     }
+
+    pub fn deinit(pml4: *PageMapping) !void {
+        try freeEntry(pml4, 4);
+    }
+
+    fn freeEntry(entry: *PageMapping, level: u8) !void {
+        // Level: 4 = PML4, 3 = PDP, 2 = PD, 1 = PT
+        for (&entry.mappings) |*e| {
+            if (!e.present) continue;
+
+            if (level > 1) {
+                // Recursively free lower-level page table
+                const child: *PageMapping = @ptrFromInt(e.get_addr() + globals.hhdm_offset);
+                try freeEntry(child, level - 1);
+            }
+
+            // Free the page table page itself
+            const phys = e.get_addr();
+            try pmm.freePage(phys);
+            e.* = @bitCast(@as(u64, 0)); // clear entry
+        }
+    }
 };

@@ -28,14 +28,14 @@ pub fn drain(_: *Writer, data: []const []const u8, splat: usize) Writer.Error!us
     var written: usize = 0;
     if (data.len == 0) return 0;
     for (data[0 .. data.len - 1]) |bytes| {
-        console.puts(bytes) catch return error.WriteFailed;
+        console.puts(bytes) catch {};
         serial.puts(bytes);
         written += bytes.len;
     }
 
     const pattern = data[data.len - 1];
     for (0..splat) |_| {
-        console.puts(pattern) catch return error.WriteFailed;
+        console.puts(pattern) catch {};
         serial.puts(pattern);
         written += pattern.len;
     }
@@ -69,9 +69,9 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.enum_litera
     };
     const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
 
-    const colored_prefix = color ++ prefix ++ reset_color;
+    const full_format = color ++ prefix ++ reset_color ++ format ++ "\n";
 
-    log_writer.print(colored_prefix ++ format ++ "\n", args) catch return;
+    log_writer.print(full_format, args) catch return;
 }
 
 pub fn panic_handler(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {

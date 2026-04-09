@@ -117,7 +117,7 @@ pub const Slab = struct {
     }
 
     pub fn free(self: *Slab, ptr: [*]u8) bool {
-        log.info("freeing ptr: {x}", .{ptr});
+        log.info("freeing ptr: 0x{x}", .{@intFromPtr(ptr)});
         const region: *FreeRegion = @ptrCast(@alignCast(ptr));
         // Clear the allocated memory before reusing it
 
@@ -154,7 +154,7 @@ pub fn SlabCacheTyped(comptime T: type) type {
         }
 
         pub fn free(self: *const @This(), ptr: *T) void {
-            self.base.free(@ptrCast(ptr));
+            if (!self.base.free(@ptrCast(ptr))) log.err("tried to free bad pointer", .{});
         }
 
         pub fn deinit(self: *const @This(), allocator: std.mem.Allocator) void {

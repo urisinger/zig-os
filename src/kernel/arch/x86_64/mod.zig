@@ -14,7 +14,8 @@ pub const shutdown = instr.shutdown;
 pub const shutdownSuccess = instr.shutdownSuccess;
 pub const writeRedirEntry = apic.writeRedirEntry;
 pub const registerInterrupt = idt.table.registerInterrupt;
-pub const jumpToUserMode = context.jumpToUserMode;
+pub const jumpToUserTask = context.jumpToUserTask;
+pub const jumpToKernelTask = context.jumpToKernelTask;
 
 pub inline fn entry() void {
     asm volatile (

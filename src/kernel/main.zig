@@ -51,12 +51,13 @@ export fn kmain() noreturn {
 
     kheap.init();
 
-
     console.init();
 
     apic.configureLocalApic() catch @panic("failed to init apic");
 
     keyboard.Manager.init();
+
+        std.log.info("0x{x}, 0x{x}", .{@intFromPtr(mem.kernel.paging.base_kernel_pml4), common.globals.hhdm_offset});
 
     ps2.init() catch @panic("failed to initilize ps2");
 
@@ -81,16 +82,20 @@ export fn kmain() noreturn {
 
     const sched = &arch.pcpu.context().scheduler;
 
-    const init_task = sched.insertTask() catch unreachable;
-    init_task.init(2, 0x100) catch unreachable;
+    _ = sched.createKernelTask(0x1000, handler, 131) catch unreachable;
+    const init_task = sched.createUserTask(2, 0x100) catch unreachable;
     init_task.loadElf(&elf_code) catch unreachable;
 
+
     sched.start();
+}
+
+pub fn handler(arg: u64) i32 {
+        log.info("hi {}", .{arg});
+        return 32;
 }
 
 pub export fn _start() callconv(.c) noreturn {
     arch.entry();
     unreachable;
 }
-
-

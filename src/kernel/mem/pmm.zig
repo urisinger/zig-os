@@ -133,6 +133,8 @@ pub fn init() !void {
         }
     }
 
+    log.info("bitmap_page: 0x{x}", .{bitmap_page});
+
     if (!bitmap_found) {
         log.err("Could not find suitable location for bitmap", .{});
         return error.OutOfMemory;

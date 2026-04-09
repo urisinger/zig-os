@@ -87,7 +87,24 @@ pub fn handler(comptime num: u8) type {
     };
 }
 
-pub fn jumpToUserMode(context: *const Context) noreturn {
+pub fn jumpToKernelTask(context: *const Context) noreturn {
+    const frame = &context.ret_frame;
+
+    asm volatile (
+        \\ mov %[rsp_val], %%rsp 
+        \\ jmp *%[rip_val]
+        :
+        : [rsp_val] "r" (frame.rsp),
+          [rip_val] "r" (frame.rip)
+        : .{ .memory = true }
+    );
+
+    unreachable;
+}
+
+
+
+pub fn jumpToUserTask(context: *const Context) noreturn {
     const frame = &context.ret_frame;
     asm volatile (
         \\ mov $0x28, %ax

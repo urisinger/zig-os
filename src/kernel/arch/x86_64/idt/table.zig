@@ -97,7 +97,7 @@ pub var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
     break :init initial_value;
 };
 
-export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{} }) *Context {
+export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{} }) ?*Context {
     const scheduler = &arch.getContext().scheduler;
 
     scheduler.saveContext(context);
