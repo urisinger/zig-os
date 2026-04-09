@@ -17,42 +17,18 @@ const uvmm = mem.user.vmm;
 const utils = root.common.utils;
 const uheap = mem.user.heap;
 
-pub const TaskQueueEntry = struct {
+pub const TaskQueueEntry = extern struct {
     task: *Task,
     next: *TaskQueueEntry,
 };
 
-pub const Scheduler = struct {
+pub const Scheduler = extern struct {
     task_qeueue: ?*TaskQueueEntry,
     const Self = @This();
-
-    pub fn print(self: *const Self) void {
-        log.info("---------------------------------------------", .{});
-        if (self.task_qeueue) |start_node| {
-            var curr = start_node;
-            var i: usize = 0;
-            while (true) : (i += 1) {
-                log.info("  [{d}] Entry: 0x{x}, Task: 0x{x}, Next: 0x{x}", .{
-                    i,
-                    @intFromPtr(curr),
-                    @intFromPtr(curr.task),
-                    @intFromPtr(curr.next),
-                });
-                curr = curr.next;
-                if (curr == start_node) break;
-                if (i > 10) {
-                    log.err("  List loop detected or too long!", .{});
-                    break;
-                }
-            }
-        }
-        log.info("---------------------------------------------", .{});
-    }
 
     pub fn nextTask(self: *Self) *Context {
         const current_task = self.task_qeueue.?;
         const next_task = current_task.next;
-
 
         next_task.task.load();
 
@@ -61,9 +37,12 @@ pub const Scheduler = struct {
         return next_task.task.context;
     }
 
-    pub fn insertTask(self: *Self, task: *Task) !void {
-        const slab = try kheap.get_slab_cache(TaskQueueEntry);
-        const queue_entry = try slab.alloc();
+    pub fn insertTask(self: *Self) !*Task {
+        const entry_slab = try kheap.get_slab_cache(TaskQueueEntry);
+        const task_slab = try kheap.get_slab_cache(Task);
+        const queue_entry = try entry_slab.alloc();
+
+        const task = try task_slab.alloc();
 
         queue_entry.task = task;
 
@@ -76,6 +55,7 @@ pub const Scheduler = struct {
             queue_entry.next = queue_entry;
             self.task_qeueue = queue_entry;
         }
+        return task;
     }
 
     pub fn start(self: *Self) noreturn {
@@ -84,11 +64,7 @@ pub const Scheduler = struct {
 
         task.load();
 
-        arch.instr.ltr(0x28);
         const context: *Context = @ptrFromInt(task.kernel_stack - @sizeOf(Context));
-
-        log.info("starting scheduler", .{});
-
         arch.jumpToUserMode(context);
     }
 
@@ -97,4 +73,3 @@ pub const Scheduler = struct {
         cur_task.task.context = context;
     }
 };
-

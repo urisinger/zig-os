@@ -90,6 +90,8 @@ pub fn handler(comptime num: u8) type {
 pub fn jumpToUserMode(context: *const Context) noreturn {
     const frame = &context.ret_frame;
     asm volatile (
+        \\ mov $0x28, %ax
+        \\ ltr %ax
         \\ swapgs
         \\ mov $0x1B, %ax
         \\ mov %ax, %ds
@@ -99,7 +101,6 @@ pub fn jumpToUserMode(context: *const Context) noreturn {
         \\ pushq %[rflags]
         \\ pushq %[cs]
         \\ pushq %[rip]
-        \\ sti
         \\ iretq
         :
         : [ss] "r" (frame.ss),

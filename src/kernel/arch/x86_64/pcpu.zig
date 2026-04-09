@@ -5,7 +5,7 @@ const instr = @import("instr.zig");
 
 const std = @import("std");
 
-pub const CoreContext = struct {
+pub const CoreContext = extern struct {
     self: *CoreContext,
     kernel_stack: u64,
     // Temporary location to store the user stack pointer for user mode
@@ -15,7 +15,7 @@ pub const CoreContext = struct {
 };
 
 pub inline fn context() *CoreContext {
-    return @ptrFromInt(asm volatile ("mov %gs:0, %[ret]"
+    return @ptrFromInt(asm volatile (std.fmt.comptimePrint("mov %gs:{d}, %[ret]", .{@offsetOf(CoreContext, "self")})
         : [ret] "=r" (-> u64),
     ));
 }

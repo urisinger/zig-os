@@ -41,10 +41,7 @@ export fn kmain() noreturn {
     framebuffer.init();
     klog.init();
 
-
-
     boot.init();
-
 
     gdt.init();
 
@@ -84,11 +81,9 @@ export fn kmain() noreturn {
 
     const sched = &arch.pcpu.context().scheduler;
 
-    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
-    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
-    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
-    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
-    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
+    const init_task = sched.insertTask() catch unreachable;
+    init_task.init(2, 0x100) catch unreachable;
+    init_task.loadElf(&elf_code) catch unreachable;
 
     sched.start();
 }

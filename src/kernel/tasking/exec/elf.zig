@@ -24,47 +24,8 @@ const context = arch.context;
 const Elf64_Phdr = elf.Elf64_Phdr;
 const Elf32_Phdr = elf.Elf32_Phdr;
 
-pub fn elfTask(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8) !*Task {
-    var user_vmm = try uvmm.VmAllocator.init(utils.MB(1), 0x00007FFFFFFFFFFF);
 
-    const user_pml4 = paging.createNewAddressSpace() catch unreachable;
-
-    const entry_point = loadElf(buffer, user_pml4, &user_vmm) catch unreachable;
-
-    const user_stack_bottom = uheap.allocateUserPages(&user_vmm, user_pml4, 3) catch unreachable;
-    const user_stack_top = user_stack_bottom + 3 * utils.PAGE_SIZE;
-
-    const kernel_stack = try pmm.allocatePageBlock(2, .@"1") + globals.hhdm_offset;
-
-    const kernel_stack_top = kernel_stack + 2 * utils.PAGE_SIZE;
-    const context_ptr: *context.Context = @ptrFromInt(kernel_stack_top - @sizeOf(context.Context));
-
-    context_ptr.* = context.Context{
-        .registers = .{},
-        .interrupt_num = 0,
-        .error_code = 0,
-        .ret_frame = .{
-            .rip = entry_point,
-            .cs = 0x20 | 0x3,
-            .rsp = user_stack_top,
-            .rflags = 0x202,
-            .ss = 0x18 | 0x3,
-        },
-    };
-
-    const task = try (try slab.get_slab_cache(Task)).alloc();
-
-    task.* = Task{
-        .context = context_ptr,
-        .vma = user_vmm,
-        .pml4 = user_pml4,
-        .kernel_stack = kernel_stack_top,
-    };
-
-    return task;
-}
-
-pub fn loadElf(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_table.PageMapping, vmm: *uvmm.VmAllocator) !u64 {
+pub fn load(buffer: []align(@alignOf(elf.Elf64_Ehdr)) const u8, pml4: *page_table.PageMapping, vmm: *uvmm.VmAllocator) !u64 {
     var fixed = std.Io.Reader.fixed(buffer[0..64]);
     const header = try Header.read(&fixed);
 

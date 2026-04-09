@@ -20,11 +20,13 @@ export fn fallback_syscall() callconv(.c) u64 {
     return 0xFFFFFFFFFFFFFFFF;
 }
 
+const pcpu = @import("../pcpu.zig");
+
 pub fn syscall_handler() callconv(.naked) void {
-    asm volatile (
+    asm volatile (std.fmt.comptimePrint(
         \\ swapgs
-        \\ mov %rsp, %gs:16 // store user stack pointer
-        \\ mov %gs:8, %rsp // load kernel stack 
+        \\ mov %rsp, %gs:{d} // store user stack pointer
+        \\ mov %gs:{d}, %rsp // load kernel stack 
         \\ sti
         \\ push %r11
         \\ push %rcx
@@ -50,11 +52,16 @@ pub fn syscall_handler() callconv(.naked) void {
         \\ pop %rcx                 
         \\ pop %r11
         \\ cli
-        \\ mov %gs:16, %rsp // load user stack pointer
+        \\ mov %gs:{d}, %rsp // load user stack pointer
         \\ swapgs
         \\ sysretq
-    );
+        , .{
+            @offsetOf(pcpu.CoreContext, "user_stack"),
+            @offsetOf(pcpu.CoreContext, "kernel_stack"),
+            @offsetOf(pcpu.CoreContext, "user_stack"),
+        }));
 }
+
 
 pub fn init() void {
     const MSR_EFER: u32 = 0xC0000080;
