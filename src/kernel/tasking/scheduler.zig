@@ -4,8 +4,9 @@ const root = @import("root");
 const elf = @import("exec/elf.zig");
 
 const arch = root.arch;
-const tss = arch.tss;
 const Context = arch.context.Context;
+
+const Task = @import("task.zig").Task;
 
 const mem = root.mem;
 const page_table = mem.page_table;
@@ -16,90 +17,84 @@ const uvmm = mem.user.vmm;
 const utils = root.common.utils;
 const uheap = mem.user.heap;
 
-const globals = root.common.globals;
-
-pub const Task = struct {
-    context: *Context,
-    pml4: *page_table.PageMapping,
-    vma: VmaAllocator,
-    kernel_stack: u64,
-};
-
 pub const TaskQueueEntry = struct {
     task: *Task,
     next: *TaskQueueEntry,
-    name: ?[]const u8,
 };
 
-pub const Scheduler = struct { task_qeueue: ?*TaskQueueEntry };
+pub const Scheduler = struct {
+    task_qeueue: ?*TaskQueueEntry,
+    const Self = @This();
 
-pub fn saveContext(constext: *Context) void {
-    const scheduler = arch.getContext().scheduler;
-    const cur_task = scheduler.task_qeueue.?;
-    cur_task.task.context = constext;
-}
-
-pub fn schedulerTick() callconv(.{ .x86_64_sysv = .{}}) *Context {
-    return nextTask();
-}
-
-fn nextTask() *Context {
-    const context = arch.getContext();
-    const scheduler = &context.scheduler;
-    const current_task = scheduler.task_qeueue.?;
-
-    const next_task = current_task.next;
-
-    if (next_task.name) |name| {
-        log.info("switching to task: {s}", .{name});
+    pub fn print(self: *const Self) void {
+        log.info("---------------------------------------------", .{});
+        if (self.task_qeueue) |start_node| {
+            var curr = start_node;
+            var i: usize = 0;
+            while (true) : (i += 1) {
+                log.info("  [{d}] Entry: 0x{x}, Task: 0x{x}, Next: 0x{x}", .{
+                    i,
+                    @intFromPtr(curr),
+                    @intFromPtr(curr.task),
+                    @intFromPtr(curr.next),
+                });
+                curr = curr.next;
+                if (curr == start_node) break;
+                if (i > 10) {
+                    log.err("  List loop detected or too long!", .{});
+                    break;
+                }
+            }
+        }
+        log.info("---------------------------------------------", .{});
     }
 
-    tss.set_rsp(next_task.task.kernel_stack);
-    const pml4 = next_task.task.pml4;
+    pub fn nextTask(self: *Self) *Context {
+        const current_task = self.task_qeueue.?;
+        const next_task = current_task.next;
 
-    arch.instr.setCr3(@intFromPtr(pml4) - globals.hhdm_offset);
 
-    context.kernel_stack = next_task.task.kernel_stack;
-    context.current_task = next_task.task;
-    scheduler.task_qeueue = next_task;
-    return next_task.task.context;
-}
+        next_task.task.load();
 
-pub fn insertTask(task: *Task, name: []const u8) !void {
-    const slab = try kheap.get_slab_cache(TaskQueueEntry);
-    const new_task = try slab.alloc();
-    log.info("new_task: 0x{x}", .{@intFromPtr(new_task)});
+        self.task_qeueue = next_task;
 
-    new_task.task = task;
-    new_task.name = name;
-
-    const context = arch.getContext();
-    const scheduler = &context.scheduler;
-    const current_task = scheduler.task_qeueue;
-
-    if (current_task) |cur_task| {
-        new_task.next = cur_task.next;
-        cur_task.next = new_task;
-    } else {
-        new_task.next = new_task;
-        scheduler.task_qeueue = new_task;
-        context.current_task = new_task.task;
-        context.kernel_stack = new_task.task.kernel_stack;
+        return next_task.task.context;
     }
-}
 
-pub fn start() noreturn {
-    const scheduler = arch.getContext().scheduler;
-    const current_task = scheduler.task_qeueue.?;
-    const task = current_task.task;
+    pub fn insertTask(self: *Self, task: *Task) !void {
+        const slab = try kheap.get_slab_cache(TaskQueueEntry);
+        const queue_entry = try slab.alloc();
 
-    tss.set_rsp(task.kernel_stack);
-    arch.instr.ltr(0x28);
+        queue_entry.task = task;
 
-    arch.instr.setCr3(@intFromPtr(task.pml4) - globals.hhdm_offset);
+        const current_task = self.task_qeueue;
 
-    const context: *Context = @ptrFromInt(task.kernel_stack - @sizeOf(Context));
+        if (current_task) |cur_task| {
+            queue_entry.next = cur_task.next;
+            cur_task.next = queue_entry;
+        } else {
+            queue_entry.next = queue_entry;
+            self.task_qeueue = queue_entry;
+        }
+    }
 
-    log.info("starting scheduler", .{});
-    arch.jumpToUserMode(context);
-}
+    pub fn start(self: *Self) noreturn {
+        const current_task = self.task_qeueue.?;
+        const task = current_task.task;
+
+        task.load();
+
+        arch.instr.ltr(0x28);
+        const context: *Context = @ptrFromInt(task.kernel_stack - @sizeOf(Context));
+
+        log.info("starting scheduler", .{});
+
+        arch.jumpToUserMode(context);
+    }
+
+    pub fn saveContext(self: *Self, context: *Context) void {
+        const cur_task = self.task_qeueue.?;
+        cur_task.task.context = context;
+    }
+};
+

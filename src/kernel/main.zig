@@ -59,6 +59,8 @@ export fn kmain() noreturn {
 
     apic.configureLocalApic() catch @panic("failed to init apic");
 
+    keyboard.Manager.init();
+
     ps2.init() catch @panic("failed to initilize ps2");
 
     keyboard.ps2.init() catch |err| {
@@ -66,15 +68,29 @@ export fn kmain() noreturn {
         @panic("PS/2 keyboard init failed");
     };
 
+    arch.registerInterrupt(0x24, dev.serial.irq, .int, .user);
+    arch.writeRedirEntry(0x4, .{
+        .vector = 0x24,
+        .delivery_mode = .Fixed,
+        .destination_mode = .Physical,
+        .pin_polarity = 0,
+        .remote_IRR = 0,
+        .trigger_mode = 1,
+        .mask = 0,
+        .destination = arch.getContext().apic_id,
+    });
+
     syscall.init();
 
-    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_1") catch unreachable;
-    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
-    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
-    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
-    scheduler.insertTask(elf.elfTask(&elf_code) catch unreachable, "task_3") catch unreachable;
+    const sched = &arch.pcpu.context().scheduler;
 
-    scheduler.start();
+    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
+    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
+    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
+    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
+    sched.insertTask(elf.elfTask(&elf_code) catch unreachable) catch unreachable;
+
+    sched.start();
 }
 
 pub export fn _start() callconv(.c) noreturn {

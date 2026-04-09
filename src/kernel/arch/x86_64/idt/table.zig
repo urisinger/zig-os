@@ -86,54 +86,34 @@ pub const IdtEntry = packed struct(u128) {
 };
 
 const idt_size = 256;
+
 pub var idt: [idt_size]IdtEntry = undefined;
 
+pub var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
+    var initial_value: [idt_size]?*const fn (*volatile Context) void = undefined;
+    for (0..idt_size) |index| {
+        initial_value[index] = null;
+    }
+    break :init initial_value;
+};
+
+export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{} }) *Context {
+    const scheduler = &arch.getContext().scheduler;
+
+    scheduler.saveContext(context);
+    if (handlers[context.interrupt_num]) |handler| {
+        handler(context);
+    } else {
+        log.err("Unhandled expetion 0x{X} err=0b{b}", .{ context.interrupt_num, @as(u32, @intCast(context.error_code)) });
+        @panic("Unhandled exeption");
+    }
+
+    const next = scheduler.nextTask();
+    return next;
+}
+
 pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) void, gate_type: GateType, ring: Ring) void {
-    context_mod.handlers[num] = handlerFn;
+    handlers[num] = handlerFn;
 
-    const handler = comptime scope: {
-        const error_code_list = [_]u8{ 8, 10, 11, 12, 13, 14, 17, 21, 29, 30 };
-
-        const push_error = if (for (error_code_list) |value| {
-            if (value == num) {
-                break true;
-            }
-        } else false)
-            ""
-        else
-            "push $0b10000000000000000\n";
-
-        const push_num = std.fmt.comptimePrint("push ${} \n", .{num});
-
-        break :scope struct {
-            fn handle() callconv(.naked) void {
-                instr.swapgs_if_necessary();
-
-                asm volatile (push_error ++ push_num);
-                instr.pushGpr();
-
-                asm volatile (
-                    \\ xor %rbp, %rbp
-                    \\ mov $0x10, %ax 
-                    \\ mov %ax, %ds
-                    \\ mov %ax, %es
-                    \\ mov %rsp, %rdi
-                    \\ call interruptDispatch
-                    \\ mov %rax, %rsp
-                    \\ mov $0x1B, %ax 
-                    \\ mov %ax, %ds
-                    \\ mov %ax, %es 
-                );
-
-                instr.popGpr();
-                asm volatile ("add $16, %rsp");
-
-                instr.swapgs_if_necessary();
-
-                asm volatile ("iretq");
-            }
-        }.handle;
-    };
-
-    idt[num] = IdtEntry.new(@intFromPtr(&handler), gate_type, ring);
+    idt[num] = IdtEntry.new(@intFromPtr(&context_mod.handler(num).handle), gate_type, ring);
 }

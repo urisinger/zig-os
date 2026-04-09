@@ -1,5 +1,7 @@
 const std = @import("std");
 const root = @import("root");
+const arch = root.arch;
+const instr = arch.instr;
 const tasking = root.tasking;
 const scheduler = tasking.scheduler;
 
@@ -41,25 +43,48 @@ pub const Context = packed struct {
     ret_frame: IretFrame,
 };
 
-const idt_size = 256;
-pub var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
-    var initial_value: [idt_size]?*const fn (*volatile Context) void = undefined;
-    for (0..idt_size) |index| {
-        initial_value[index] = null;
-    }
-    break :init initial_value;
-};
+pub fn handler(comptime num: u8) type {
+    const error_code_list = [_]u8{ 8, 10, 11, 12, 13, 14, 17, 21, 29, 30 };
 
-export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{}}) *Context {
-    scheduler.saveContext(context);
-    if (handlers[context.interrupt_num]) |handler| {
-        handler(context);
-    } else {
-        const log = std.log.scoped(.idt);
-        log.err("Unhandled expetion 0x{X} err=0b{b}", .{ context.interrupt_num, @as(u32, @intCast(context.error_code)) });
-        @panic("Unhandled exeption");
-    }
-    return scheduler.schedulerTick();
+    const push_error = if (for (error_code_list) |value| {
+        if (value == num) {
+            break true;
+        }
+    } else false)
+        ""
+    else
+        "push $0b10000000000000000\n";
+
+    const push_num = std.fmt.comptimePrint("push ${} \n", .{num});
+
+    return struct {
+        pub fn handle() callconv(.naked) void {
+            instr.swapgs_if_necessary();
+
+            asm volatile (push_error ++ push_num);
+            instr.pushGpr();
+
+            asm volatile (
+                \\ xor %rbp, %rbp
+                \\ mov $0x10, %ax 
+                \\ mov %ax, %ds
+                \\ mov %ax, %es
+                \\ mov %rsp, %rdi
+                \\ call interruptDispatch
+                \\ mov %rax, %rsp
+                \\ mov $0x1B, %ax 
+                \\ mov %ax, %ds
+                \\ mov %ax, %es 
+            );
+
+            instr.popGpr();
+            asm volatile ("add $16, %rsp");
+
+            instr.swapgs_if_necessary();
+
+            asm volatile ("iretq");
+        }
+    };
 }
 
 pub fn jumpToUserMode(context: *const Context) noreturn {
@@ -82,7 +107,6 @@ pub fn jumpToUserMode(context: *const Context) noreturn {
           [rflags] "r" (frame.rflags),
           [cs] "r" (frame.cs),
           [rip] "r" (frame.rip),
-        : .{ .memory = true }
-    );
+        : .{ .memory = true });
     unreachable;
 }

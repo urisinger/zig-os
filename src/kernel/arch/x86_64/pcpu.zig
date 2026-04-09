@@ -10,7 +10,6 @@ pub const CoreContext = struct {
     kernel_stack: u64,
     // Temporary location to store the user stack pointer for user mode
     user_stack: u64,
-    current_task: *scheduler.Task,
     scheduler: scheduler.Scheduler,
     apic_id: u8,
 };

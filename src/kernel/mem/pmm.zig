@@ -63,10 +63,12 @@ pub fn allocatePageBlock(num_pages: usize, page_alignment: std.mem.Alignment) !u
         return Error.OutOfMemory;
     };
 
+    log.info("PMM: Allocating {d} pages at phys 0x{x} (alignment: {d})", .{num_pages, page * utils.PAGE_SIZE, page_alignment.toByteUnits()});
+
     // Verify the block is actually free
     for (page..page + num_pages) |i| {
         if (!bitmap.?.get(i)) {
-            log.err("Found block at {d} but it's not fully free", .{page});
+            log.err("PMM CRITICAL: findFirstNSetAligned returned page {d} (phys 0x{x}) but bit {d} is NOT SET!", .{page, page * utils.PAGE_SIZE, i});
             return Error.OutOfMemory;
         }
     }

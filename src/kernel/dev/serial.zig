@@ -1,4 +1,5 @@
 const std = @import("std");
+const log = std.log.scoped(.serial);
 const PORT = 0x3f8;
 
 const root = @import("root");
@@ -37,12 +38,34 @@ pub fn init() SerialError!void {
     // If serial is not faulty, set it in normal operation mode
     // (not-loopback with IRQs enabled and OUT#1 and OUT#2 bits enabled)
     instr.outb(PORT + 4, 0x0F);
+    instr.outb(PORT + 1, 0x01); // Enable Receiver Data Available Interrupt
 
     return; // Success, no error
 }
 
 fn isTransmitEmpty() bool {
     return instr.inb(PORT + 5) & 0x20 != 0;
+}
+
+pub fn hasData() bool {
+    return instr.inb(PORT + 5) & 1 != 0;
+}
+
+pub fn readByte() u8 {
+    while (!hasData()) {}
+    return instr.inb(PORT);
+}
+
+pub fn irq(ctx: *volatile arch.context.Context) void {
+    _ = ctx;
+    while (hasData()) {
+        const byte = instr.inb(PORT);
+        if (byte == 'q') {
+            log.info("Serial 'q' received, shutting down...", .{});
+            arch.shutdownSuccess();
+        }
+    }
+    arch.apic.sendEoi();
 }
 
 pub fn writeByte(a: u8) void {

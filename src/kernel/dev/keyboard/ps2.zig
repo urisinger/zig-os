@@ -1,9 +1,9 @@
 const std = @import("std");
 const root = @import("root");
-const log = std.log.scoped(.ps2);
+const log = std.log.scoped(.ps2_keyboard);
 const arch = root.arch;
 const ps2 = @import("../ps2.zig");
-const KeyCode = @import("mod.zig").KeyCode;
+const keyboard = @import("mod.zig");
 
 pub const Error = error{
     CommandTimeout,
@@ -13,8 +13,6 @@ pub const Error = error{
     NoDeviceResponse,
     DeviceNotAcknowledging,
 };
-
-var driver_state = DriverState{};
 
 pub fn init() !void {
     _ = ps2.readData() catch 0;
@@ -26,9 +24,9 @@ pub fn init() !void {
     try ps2.writeDataToPort(1, 0x01); // Set 1
     if (try ps2.readData() != 0xFA) return error.DeviceNotAcknowledging;
 
-    arch.registerInterrupt(0x20, irq, .int, .user);
+    arch.registerInterrupt(0x21, irq, .int, .user);
     arch.writeRedirEntry(0x1, .{
-        .vector = 0x20,
+        .vector = 0x21,
         .delivery_mode = .Fixed,
         .destination_mode = .Physical,
         .pin_polarity = 0,
@@ -40,25 +38,31 @@ pub fn init() !void {
     try ps2.enableInterrupt(1);
 }
 
-pub const DriverState = struct {
-    pub fn handleScancode(_: *DriverState, scancode: u8) ?KeyCode {
-        const released = (scancode & 0x80) != 0;
-        const code = scancode & 0x7F;
+pub fn handleScancode(scancode: u8) ?keyboard.KeyEvent {
+    const released = (scancode & 0x80) != 0;
+    const code = scancode & 0x7F;
 
-        return switch (code) {
-            0x01 => if (!released) .Escape else null,
-            0x1C => if (!released) .Enter else null,
-            0x0E => if (!released) .Backspace else null,
-            0x10 => if (!released) .Q else null,
-            0x11 => if (!released) .W else null,
-            0x12 => if (!released) .E else null,
-            0x13 => if (!released) .R else null,
-            else => null,
-        };
-    }
-};
+    const state: keyboard.KeyState = if (released) .released else .pressed;
 
-var keyboard_state = DriverState{};
+    const key_code: keyboard.KeyCode = switch (code) {
+        0x01 => .Escape,
+        0x10 => .Q, 0x11 => .W, 0x12 => .E, 0x13 => .R, 0x14 => .T, 0x15 => .Y, 0x16 => .U, 0x17 => .I, 0x18 => .O, 0x19 => .P,
+        0x1E => .A, 0x1F => .S, 0x20 => .D, 0x21 => .F, 0x22 => .G, 0x23 => .H, 0x24 => .J, 0x25 => .K, 0x26 => .L,
+        0x2C => .Z, 0x2D => .X, 0x2E => .C, 0x2F => .V, 0x30 => .B, 0x31 => .N, 0x32 => .M,
+        0x1C => .Enter,
+        0x0E => .Backspace,
+        0x39 => .Space,
+        0x0F => .Tab,
+        0x2A => .LeftShift,
+        0x36 => .RightShift,
+        0x1D => .LeftControl,
+        0x38 => .LeftAlt,
+        else => .Unknown,
+    };
+
+    if (key_code == .Unknown) return null;
+    return .{ .code = key_code, .state = state };
+}
 
 pub fn irq(ctx: *volatile arch.context.Context) void {
     _ = ctx;
@@ -66,12 +70,11 @@ pub fn irq(ctx: *volatile arch.context.Context) void {
         arch.apic.sendEoi();
         return;
     };
-    if (keyboard_state.handleScancode(scancode)) |key| {
-        log.info("Key event: {}", .{key});
-        if (key == .Escape){
-            arch.shutdownSuccess();
-        }
+
+    if (handleScancode(scancode)) |event| {
+        keyboard.Manager.handleEvent(event);
     }
+
 
     arch.apic.sendEoi();
 }
