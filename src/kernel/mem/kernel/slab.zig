@@ -37,12 +37,6 @@ pub fn get_slab_cache(T: type) !SlabCacheTyped(T) {
     new_cache.next = current.?.next;
     current.?.next = new_cache;
 
-    current = &top_slab_cache.?;
-    while (current) |cache| {
-        log.info("cache: {d}", .{cache.obj_size});
-        current = cache.next;
-    }
-
     return .fromBase(new_cache);
 }
 
