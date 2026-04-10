@@ -19,8 +19,6 @@ const slab = @import("slab.zig");
 pub const get_slab_cache = slab.get_slab_cache;
 
 pub fn init() void {
-
-    log.err("hi", .{});
     pmm.init() catch @panic("failed to init pmm");
 
     paging.init() catch |err| {

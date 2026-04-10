@@ -16,6 +16,9 @@ const utils = root.common.utils;
 const pmm = mem.pmm;
 const uheap = mem.user.heap;
 
+const core = root.core;
+const cbip = core.cbip;
+
 pub const TaskType = enum { Kernel, User };
 pub const TaskState = enum { Runnable, Sleeping, Dead };
 
@@ -25,6 +28,8 @@ pub const Task = struct {
     context: *Context,
     kernel_stack: u64,
     kernel_stack_pages: usize, // track for freeing
+
+    vnodes: [32]?*cbip.Vnode = [_]?*cbip.Vnode{null} ** 32,
 
     pub fn asUser(self: *Task) ?*UserTask {
         if (self.kind != .User) return null;
@@ -37,7 +42,6 @@ pub const Task = struct {
     }
 
     pub fn start(self: *Task) noreturn {
-
         arch.instr.ltr(0x28);
         switch (self.kind) {
             .User => arch.jumpToUserTask(self.context),
@@ -78,13 +82,13 @@ pub const Task = struct {
 
 pub export fn kernelTaskEntry() noreturn {
     arch.instr.sti();
-    const core = arch.getContext();
-    const task = (core.scheduler.currentTask() orelse unreachable).asKernel() orelse unreachable;
+    const core_ctx = arch.getContext();
+    const task = (core_ctx.scheduler.currentTask() orelse unreachable).asKernel() orelse unreachable;
 
     const exit = task.entry(task.arg);
     std.log.debug("thread exited with exit code: {}", .{exit});
 
-    core.scheduler.exitCurrentTask();
+    core_ctx.scheduler.exitCurrentTask();
     unreachable;
 }
 
@@ -108,6 +112,7 @@ pub const UserTask = struct {
         self.base.kind = .User;
         self.base.state = .Runnable;
         self.base.kernel_stack_pages = kernel_stack_pages;
+        self.base.vnodes = [_]?*cbip.Vnode{null} ** 32;
 
         // Kernel stack
         const kstack_base = try pmm.allocatePageBlock(kernel_stack_pages, .@"1") + globals.hhdm_offset;
@@ -118,12 +123,18 @@ pub const UserTask = struct {
         self.vma = try VmAllocator.init(utils.MB(1), 0x00007FFFFFFFFFFF);
 
         // User stack allocation via VMA
+        const stack_size = user_stack_pages * utils.PAGE_SIZE;
         const ustack_bottom = try self.vma.allocate(
-            user_stack_pages * utils.PAGE_SIZE,
+            stack_size,
             utils.PAGE_SIZE,
             vmm.Attr{ .permissions = .ReadWrite },
         );
-        const ustack_top = ustack_bottom + user_stack_pages * utils.PAGE_SIZE;
+        const ustack_top = ustack_bottom + stack_size;
+
+        const ustack_phys = try pmm.allocatePageBlock(user_stack_pages, .@"1");
+
+        try self.pml4.mmap(@bitCast(ustack_bottom), ustack_phys, stack_size, .{ .read_write = .read_write, .user_supervisor = .user });
+        // -------------------------------------------------------
 
         // Context lives on kernel stack
         self.base.context = @ptrFromInt(self.base.kernel_stack - @sizeOf(Context));
@@ -158,6 +169,7 @@ pub const KernelTask = struct {
         self.base.kind = .Kernel;
         self.base.state = .Runnable;
         self.base.kernel_stack_pages = kernel_stack_pages;
+        self.base.vnodes = [_]?*cbip.Vnode{null} ** 32;
 
         const kstack_base = try pmm.allocatePageBlock(kernel_stack_pages, .@"1") + globals.hhdm_offset;
         self.base.kernel_stack = kstack_base + kernel_stack_pages * utils.PAGE_SIZE;
@@ -166,8 +178,7 @@ pub const KernelTask = struct {
 
         self.base.context = @ptrFromInt(self.base.kernel_stack - @sizeOf(Context));
         self.base.context.* = Context{
-            .registers = .{
-            },
+            .registers = .{},
             .interrupt_num = 0,
             .error_code = 0,
             .ret_frame = .{

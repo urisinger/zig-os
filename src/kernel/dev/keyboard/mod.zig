@@ -38,7 +38,6 @@ pub const Manager = struct {
     pub fn handleEvent(event: KeyEvent) void {
         if (!initialized) return;
         
-        // This is where we'd push to a ring buffer or notify a listener.
         log.info("Key Event: {s} {s}", .{@tagName(event.code), @tagName(event.state)});
     }
 };

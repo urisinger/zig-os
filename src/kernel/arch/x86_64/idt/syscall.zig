@@ -7,8 +7,11 @@ const instr = @import("../instr.zig");
 const core = root.core;
 const syscalls = core.syscall;
 
-var syscall_table: [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.{ .x86_64_sysv = .{} }) u64 = [3]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.{ .x86_64_sysv = .{} }) u64{
+var syscall_table: [6]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.{ .x86_64_sysv = .{} }) u64 = [6]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.{ .x86_64_sysv = .{} }) u64{
     &syscalls.testSyscall,
+    &syscalls.open,
+    &syscalls.get_interface_info,
+    &syscalls.call_interface,
     &syscalls.testSyscall,
     &syscalls.testSyscall,
 };
