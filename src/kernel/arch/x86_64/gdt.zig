@@ -31,7 +31,7 @@ pub fn init() void {
         .offset = @intFromPtr(&table),
     };
 
-    load(&gdtr); // your existing function that wraps `lgdt`
+    instr.lgdt(@intFromPtr(&gdtr));
 
     // Inline assembly to flush segment registers
     asm volatile (
@@ -141,6 +141,3 @@ pub const GdtDescriptor = packed struct {
     offset: usize,
 };
 
-pub fn load(gdtr: *const GdtDescriptor) void {
-    instr.lgdt(@intFromPtr(gdtr));
-}

@@ -40,7 +40,7 @@ const exception_names: [32]?[]const u8 = [_]?[]const u8{
     null,
 };
 
-pub fn handleException(ctx: *volatile Context) void {
+pub fn handleException(ctx: *Context) *Context {
     const interrupt_num = ctx.interrupt_num;
     const name = if (interrupt_num < exception_names.len and exception_names[interrupt_num] != null)
         exception_names[interrupt_num].?
@@ -65,6 +65,7 @@ pub fn handleException(ctx: *volatile Context) void {
     log.err("Unhandled Exception {} (0x{x}): {s}", .{ interrupt_num, interrupt_num, name });
     log.err("CPU exception occurred.", .{});
     instr.halt();
+    return ctx;
 }
 
 pub fn dumpRegisters(ctx: *const Context) void {

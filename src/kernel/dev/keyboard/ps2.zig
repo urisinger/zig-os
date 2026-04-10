@@ -25,7 +25,7 @@ pub fn init() !void {
     if (try ps2.readData() != 0xFA) return error.DeviceNotAcknowledging;
 
     arch.registerInterrupt(0x21, irq, .int, .user);
-    arch.writeRedirEntry(0x1, .{
+    arch.setRedirEntry(0x1, .{
         .vector = 0x21,
         .delivery_mode = .Fixed,
         .destination_mode = .Physical,
@@ -64,16 +64,17 @@ pub fn handleScancode(scancode: u8) ?keyboard.KeyEvent {
     return .{ .code = key_code, .state = state };
 }
 
-pub fn irq(ctx: *volatile arch.context.Context) void {
-    _ = ctx;
+pub fn irq(ctx: *arch.context.Context) *arch.context.Context {
     const scancode = ps2.readData() catch {
-        arch.apic.sendEoi();
-        return;
+        arch.lapic.sendEoi();
+        return ctx;
     };
 
     if (handleScancode(scancode)) |event| {
         keyboard.Manager.handleEvent(event);
     }
 
-    arch.apic.sendEoi();
+    arch.lapic.sendEoi();
+
+    return ctx;
 }

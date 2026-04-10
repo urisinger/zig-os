@@ -89,33 +89,24 @@ const idt_size = 256;
 
 pub var idt: [idt_size]IdtEntry = undefined;
 
-pub var handlers: [idt_size]?*const fn (*volatile Context) void = init: {
-    var initial_value: [idt_size]?*const fn (*volatile Context) void = undefined;
+pub var handlers: [idt_size]?*const fn (*Context) *Context = init: {
+    var initial_value: [idt_size]?*const fn (*Context) *Context = undefined;
     for (0..idt_size) |index| {
         initial_value[index] = null;
     }
     break :init initial_value;
 };
 
-export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{} }) ?*Context {
-    const scheduler = &arch.getContext().scheduler;
-
-    scheduler.saveContext(context);
-
-
+export fn interruptDispatch(context: *Context) callconv(.{ .x86_64_sysv = .{} }) *Context {
     if (handlers[context.interrupt_num]) |handler| {
-        handler(context);
+        return handler(context);
     } else {
         log.err("Unhandled expetion 0x{X} err=0b{b}", .{ context.interrupt_num, @as(u32, @intCast(context.error_code)) });
         @panic("Unhandled exeption");
     }
-
-    const next = scheduler.nextTask();
-
-    return next;
 }
 
-pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*volatile Context) void, gate_type: GateType, ring: Ring) void {
+pub fn registerInterrupt(comptime num: u8, handlerFn: fn (*Context) *Context, gate_type: GateType, ring: Ring) void {
     handlers[num] = handlerFn;
 
     idt[num] = IdtEntry.new(@intFromPtr(&context_mod.handler(num).handle), gate_type, ring);

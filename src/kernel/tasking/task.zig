@@ -49,9 +49,8 @@ pub const Task = struct {
         tss.set_rsp(self.kernel_stack);
         arch.getContext().kernel_stack = self.kernel_stack;
 
-        switch (self.kind) {
-            .Kernel => arch.instr.setCr3(@intFromPtr(paging.base_kernel_pml4) - globals.hhdm_offset),
-            .User => arch.instr.setCr3(@intFromPtr(self.asUser().?.pml4) - globals.hhdm_offset),
+        if (self.kind == .User) {
+            arch.instr.setCr3(@intFromPtr(self.asUser().?.pml4) - globals.hhdm_offset);
         }
     }
 

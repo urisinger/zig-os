@@ -53,11 +53,9 @@ export fn kmain() noreturn {
 
     console.init();
 
-    apic.configureLocalApic() catch @panic("failed to init apic");
+    apic.init() catch @panic("failed to init apic");
 
     keyboard.Manager.init();
-
-    std.log.info("0x{x}, 0x{x}", .{ @intFromPtr(mem.kernel.paging.base_kernel_pml4), common.globals.hhdm_offset });
 
     ps2.init() catch @panic("failed to initilize ps2");
 
@@ -66,25 +64,15 @@ export fn kmain() noreturn {
         @panic("PS/2 keyboard init failed");
     };
 
-    arch.registerInterrupt(0x24, dev.serial.irq, .int, .user);
-    arch.writeRedirEntry(0x4, .{
-        .vector = 0x24,
-        .delivery_mode = .Fixed,
-        .destination_mode = .Physical,
-        .pin_polarity = 0,
-        .remote_IRR = 0,
-        .trigger_mode = 1,
-        .mask = 0,
-        .destination = arch.getContext().apic_id,
-    });
+    dev.serial.initInterrupts();
 
     syscall.init();
 
     const sched = &arch.pcpu.context().scheduler;
 
     const init_task = sched.createUserTask(2, 0x100) catch unreachable;
-
     _ = sched.createKernelTask(0x1000, handler, 131) catch unreachable;
+
     init_task.loadElf(&elf_code) catch unreachable;
 
     sched.start();

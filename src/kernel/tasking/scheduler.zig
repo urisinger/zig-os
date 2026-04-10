@@ -3,6 +3,7 @@ const log = std.log.scoped(.scheduler);
 const root = @import("root");
 const arch = root.arch;
 const Context = arch.context.Context;
+const irq = @import("irq.zig");
 
 const Task = @import("task.zig").Task;
 const UserTask = @import("task.zig").UserTask;
@@ -26,10 +27,11 @@ pub const Scheduler = extern struct {
     // ---------------------
     // Scheduler Core
     // ---------------------
-    pub fn nextTask(self: *Self) ?*Context {
+    pub fn nextTask(self: *Self, ctx: *Context) ?*Context {
         if (self.task_queue == null) return null;
 
         var current = self.task_queue.?;
+        current.task.context = ctx;
         var next = current.next;
 
         // Skip and free dead tasks
@@ -47,6 +49,7 @@ pub const Scheduler = extern struct {
 
         next.task.load();
         self.task_queue = next;
+
         return next.task.context;
     }
 
@@ -63,6 +66,9 @@ pub const Scheduler = extern struct {
             if (self.task_queue == null) unreachable;
         }
 
+        arch.registerInterrupt(0x20, irq.timer, .int, .user);
+        arch.lapic.startTimer(0x20, 10, true);
+
         current.task.load();
         current.task.start();
     }
@@ -72,7 +78,7 @@ pub const Scheduler = extern struct {
 
     pub fn saveContext(self: *Self, ctx: *Context) void {
         const cur = self.task_queue.?;
-        cur.task.context = ctx;
+        log.info("cur: 0x{x}, next: 0x{x}", .{@intFromPtr(cur.task.context), @intFromPtr(ctx)});
     }
 
     // ---------------------
@@ -146,7 +152,7 @@ pub const Scheduler = extern struct {
     pub fn exitCurrentTask(self: *Self) noreturn {
         const entry = self.task_queue.?;
         entry.task.state = .Dead;
-        arch.instr.int(0x24);
+        arch.instr.int(0x20);
         unreachable;
     }
 };

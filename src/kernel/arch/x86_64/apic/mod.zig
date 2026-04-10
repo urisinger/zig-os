@@ -1,148 +1,40 @@
-const std = @import("std");
-const log = std.log.scoped(.apic);
+const lapic = @import("lapic.zig");
+const ioapic = @import("ioapic.zig");
 
+const instr = @import("../instr.zig");
 const root = @import("root");
-const arch = root.arch;
-const instr = root.arch.instr;
-const common = root.common;
-const globals = common.globals;
+const globals = root.common.globals;
+const paging = root.mem.kernel.paging;
 
-const mem = root.mem;
-const paging = mem.kernel.paging;
-const pmm = mem.pmm;
+const IOAPIC_PBASE = 0xFEC00000;
 
-const IA32_APIC_BASE = 0x1B;
-const APIC_BASE_MASK = 0xFFFFF000;
-const APIC_BASE_TOP = 0xFEE00000;
-const APIC_ENABLE_BIT = 1 << 11;
+pub fn init() !void {
+    // 1. Get the LAPIC Physical Base from the MSR
+    const msr_val = instr.readMsr(0x1B);
+    const lapic_pbase = msr_val & 0xFFFFF000;
 
-const SPURIOUS_INTERRUPT_REGISTER = 0xF;
+    // 2. Ensure these pages are mapped in your kernel page tables
+    const lapic_vaddr = lapic_pbase + globals.hhdm_offset;
+    const ioapic_vaddr = IOAPIC_PBASE + globals.hhdm_offset;
 
-const LVT_TIMER_REGISTER = 0x32;
-const TIMER_DIV_REGISTER = 0x3E;
-const TIMER_INITIAL_COUNT = 0x38;
-
-const TIME_PERIODIC = 0x20000;
-
-const IOAPICID = 0x00;
-const IOAPICVER = 0x01;
-const IOAPICARB = 0x02;
-
-const DeliveryMode = enum(u3) {
-    Fixed = 0b000,
-    LowPriority = 0b001,
-    SMI = 0b010,
-    NMI = 0b100,
-    INIT = 0b101,
-    ExtINT = 0b111,
-};
-
-const DestinationMode = enum(u1) {
-    Physical = 0,
-    Logical = 1,
-};
-
-var apic_ver: u32 = 0;
-var redir_entry_count: u32 = 0;
-
-const RedirectionEntry = packed struct {
-    vector: u8,
-    delivery_mode: DeliveryMode,
-    destination_mode: DestinationMode,
-    delivery_status: u1 = 0,
-    pin_polarity: u1,
-    remote_IRR: u1,
-    trigger_mode: u1,
-    mask: u1,
-    reserved: u39 = 0,
-    destination: u8,
-};
-
-const IOAPIC_DEFAULT_ADDR = 0xFEC00000;
-
-var apicBase: ?[*]volatile u32 = null;
-var ioApicBase: ?[*]volatile u32 = null;
-
-pub fn enableLocalApic() !void {
-    var base = instr.readMsr(IA32_APIC_BASE);
-    base |= APIC_ENABLE_BIT;
-    instr.writeMsr(IA32_APIC_BASE, base);
-    const apic_page_addr = (base & APIC_BASE_MASK) | APIC_BASE_TOP;
-    const apic_vaddr = apic_page_addr + globals.hhdm_offset;
-
-    try paging.mapPage(@bitCast(apic_vaddr), apic_page_addr, .{
+    try paging.mapPage(@bitCast(lapic_vaddr), lapic_pbase, .{
         .present = true,
         .read_write = .read_write,
+        .cache_disable = true, 
     });
 
-    try pmm.setBlockAllocated(apic_page_addr);
-
-    apicBase = @ptrFromInt(apic_vaddr);
-
-    const io_apic_vaddr = IOAPIC_DEFAULT_ADDR + globals.hhdm_offset;
-
-    try paging.mapPage(@bitCast(io_apic_vaddr), IOAPIC_DEFAULT_ADDR, .{
+    try paging.mapPage(@bitCast(ioapic_vaddr), IOAPIC_PBASE, .{
         .present = true,
         .read_write = .read_write,
+        .cache_disable = true,
     });
 
-    try pmm.setBlockAllocated(IOAPIC_DEFAULT_ADDR);
-
-    ioApicBase = @ptrFromInt(io_apic_vaddr);
-}
-
-pub inline fn writeRegister(reg: u32, value: u32) void {
-    const apic_base = apicBase.?;
-    apic_base[reg * 4] = value;
-}
-
-pub inline fn readRegister(reg: u32) u32 {
-    const apic_base = apicBase.?;
-    return apic_base[reg * 4];
-}
-
-pub inline fn writeIoRegister(reg: u32, value: u32) void {
-    ioApicBase.?[0] = reg;
-    ioApicBase.?[4] = value;
-}
-
-pub inline fn readIoRegister(reg: u32) u32 {
-    ioApicBase.?[0] = reg;
-    return ioApicBase.?[4];
-}
-
-pub inline fn sendEoi() void {
-    writeRegister(0xB, 0);
-}
-
-pub inline fn writeRedirEntry(entry_num: u8, entry: RedirectionEntry) void {
-    const entry_u64: u64 = @bitCast(entry);
-    writeIoRegister(0x10 + @as(u32, @intCast(entry_num)) * 2 + 1, @intCast(entry_u64 >> 32));
-
-    writeIoRegister(0x10 + @as(u32, @intCast(entry_num)) * 2, @intCast(entry_u64));
-}
-
-pub fn configureLocalApic() !void {
-    // Enable the Local APIC by setting the appropriate MSR bit
-    try enableLocalApic();
-
-    // Disable legacy PIC interrupts by masking all interrupts (0xFF) on both PICs (master/slave)
-    instr.outb(0xA1, 0xff); // Slave PIC
-    instr.outb(0x21, 0xff); // Master PIC
-
-    // Set the Spurious Interrupt Vector Register to vector 0xFF with the APIC software enable bit (bit 8)
-    writeRegister(SPURIOUS_INTERRUPT_REGISTER, 0x100 | 0xFF);
-
-    // Read the APIC ID from the IOAPICID register (bits 24–27 hold the ID)
-    const ctx = arch.getContext();
-    ctx.apic_id = @intCast((readIoRegister(IOAPICID) >> 24) & 0xF0);
-
-    // Read the IOAPIC version from the IOAPICVER register
-    apic_ver = @intCast(readIoRegister(IOAPICVER));
-
-    // Determine how many redirection entries the IOAPIC supports (bits 16–23 + 1)
-    redir_entry_count = (readIoRegister(IOAPICVER) >> 16) + 1;
-
-    // Log the detected APIC ID, version, and redirection entry count
-    log.info("apic_ID: 0x{x}, apic_ver: 0x{x}", .{ ctx.apic_id, apic_ver });
+    // 3. Initialize the modules
+    lapic.init(lapic_vaddr);
+    ioapic.init(ioapic_vaddr);
+    lapic.calibrate();
+    
+    // 4. Disable the old 8259 PIC
+    instr.outb(0xA1, 0xFF);
+    instr.outb(0x21, 0xFF);
 }

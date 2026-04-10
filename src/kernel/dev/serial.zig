@@ -43,6 +43,20 @@ pub fn init() SerialError!void {
     return; // Success, no error
 }
 
+pub fn initInterrupts() void {
+    arch.registerInterrupt(0x24, irq, .int, .user);
+    arch.setRedirEntry(0x4, .{
+        .vector = 0x24,
+        .delivery_mode = .Fixed,
+        .destination_mode = .Physical,
+        .pin_polarity = 0,
+        .remote_IRR = 0,
+        .trigger_mode = 1,
+        .mask = 0,
+        .destination = arch.getContext().apic_id,
+    });
+}
+
 fn isTransmitEmpty() bool {
     return instr.inb(PORT + 5) & 0x20 != 0;
 }
@@ -56,8 +70,7 @@ pub fn readByte() u8 {
     return instr.inb(PORT);
 }
 
-pub fn irq(ctx: *volatile arch.context.Context) void {
-    _ = ctx;
+pub fn irq(ctx: *arch.context.Context) *arch.context.Context {
     while (hasData()) {
         const byte = instr.inb(PORT);
         if (byte == 'q') {
@@ -65,7 +78,8 @@ pub fn irq(ctx: *volatile arch.context.Context) void {
             arch.shutdownSuccess();
         }
     }
-    arch.apic.sendEoi();
+    arch.lapic.sendEoi();
+    return ctx;
 }
 
 pub fn writeByte(a: u8) void {
