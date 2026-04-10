@@ -5,7 +5,6 @@ pub inline fn getCr3() u64 {
 }
 
 pub inline fn setCr3(pml4: u64) void {
-    @import("std").log.info("setting cr3 to 0x{x}", .{pml4});
     asm volatile ("mov %[pml4], %cr3"
         :
         : [pml4] "r" (pml4),

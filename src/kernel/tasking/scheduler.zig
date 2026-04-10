@@ -23,56 +23,11 @@ pub const Scheduler = extern struct {
     task_queue: ?*TaskQueueEntry,
     const Self = @This();
 
-    pub fn dump(self: *Scheduler) void {
-
-        if (self.task_queue == null) {
-            log.info("task queue is empty", .{});
-            return;
-        }
-
-        const start_task = self.task_queue.?;
-        var current = start_task;
-        var i: usize = 0;
-
-        log.info("---- Task Queue Dump ----", .{});
-
-        while (true) {
-            const task = current.task;
-
-            log.info(
-                "[{}] task=*{x}, kind={s}, state={s}, kstack=0x{x}",
-                .{
-                    i,
-                    @intFromPtr(task),
-                    @tagName(task.kind),
-                    @tagName(task.state),
-                    task.kernel_stack,
-                },
-            );
-
-            current = current.next;
-            i += 1;
-
-            // Stop if we loop back
-            if (current == start_task) break;
-
-            // Safety guard (in case of corruption)
-            if (i > 1024) {
-                log.err("task queue seems corrupted (loop > 1024)", .{});
-                break;
-            }
-        }
-
-        log.info("--------------------------", .{});
-    }
-
     // ---------------------
     // Scheduler Core
     // ---------------------
     pub fn nextTask(self: *Self) ?*Context {
         if (self.task_queue == null) return null;
-
-        self.dump();
 
         var current = self.task_queue.?;
         var next = current.next;
