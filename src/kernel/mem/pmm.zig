@@ -63,7 +63,6 @@ pub fn allocatePageBlock(num_pages: usize, page_alignment: std.mem.Alignment) !u
         return Error.OutOfMemory;
     };
 
-    log.debug("PMM: Allocating {d} pages at phys 0x{x} (alignment: {d})", .{num_pages, page * utils.PAGE_SIZE, page_alignment.toByteUnits()});
 
     // Verify the block is actually free
     for (page..page + num_pages) |i| {

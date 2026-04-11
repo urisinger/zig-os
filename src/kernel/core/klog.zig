@@ -75,6 +75,7 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.enum_litera
 }
 
 pub fn panic_handler(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
+    instr.cli();
     panic(msg);
 
     instr.shutdown();
@@ -91,16 +92,13 @@ pub fn panic(msg: []const u8) void {
 pub fn dumpStack(writer: *std.Io.Writer, return_address: usize, frame_address: usize) !void {
     var iter = std.debug.StackIterator.init(return_address, frame_address);
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{
-        .thread_safe = false,
-    }){ .backing_allocator = std.heap.page_allocator };
-    const gpa_allocator = gpa.allocator();
+    const allocator = root.mem.kernel.heap.allocator;
 
-    if (getSelfDwarf(gpa_allocator)) |_dwarf| {
+    if (getSelfDwarf(allocator)) |_dwarf| {
         var dwarf = _dwarf;
 
         while (iter.next()) |r_addr| {
-            printSourceAtAddress(gpa_allocator, writer, &dwarf, r_addr) catch {};
+            printSourceAtAddress(allocator, writer, &dwarf, r_addr) catch {};
         }
     } else |err| {
         std.log.scoped(.panic).err("failed to open DWARF info: {}", .{err});

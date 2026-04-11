@@ -5,81 +5,100 @@ const log = std.log.scoped(.vfs);
 
 pub const Vnode = struct {
     name: []const u8,
-    cbip_vnode: cbip.Vnode,
-    children: [16]?*Vnode = [_]?*Vnode{null} ** 16,
-    child_count: usize = 0,
-    is_dir: bool = false,
+    data: union(enum) {
+        directory: struct {
+            children: [16]?*Vnode = [_]?*Vnode{null} ** 16,
+            count: usize = 0,
+        },
+        device: struct {
+            /// The CBIP Handshake function
+            get_interface: *const fn (self: *Vnode, id: u64) cbip.InterfaceResult,
+        },
+    },
 
-    pub fn init(name: []const u8, is_dir: bool) Vnode {
+    pub fn initDir(name: []const u8) Vnode {
         return .{
             .name = name,
-            .is_dir = is_dir,
-            .cbip_vnode = .{ .name = name },
+            .data = .{ .directory = .{} },
+        };
+    }
+
+    pub fn initDevice(
+        name: []const u8, 
+        iface_fn: *const fn (*Vnode, u64) cbip.InterfaceResult,
+    ) Vnode {
+        return .{
+            .name = name,
+            .data = .{ 
+                .device = .{ 
+                    .get_interface = iface_fn,
+                } 
+            },
+        };
+    }
+
+    pub fn requestInterface(self: *Vnode, id: u64) cbip.InterfaceResult {
+        return switch (self.data) {
+            .device => |dev| dev.get_interface(self, id),
+            .directory => .{ .vtable = null, .context = null, .status = 404 },
         };
     }
 
     pub fn addChild(self: *Vnode, child: *Vnode) !void {
-        if (!self.is_dir) return error.NotADirectory;
-        if (self.child_count >= self.children.len) return error.DirectoryFull;
-        self.children[self.child_count] = child;
-        self.child_count += 1;
+        switch (self.data) {
+            .directory => |*dir| {
+                if (dir.count >= dir.children.len) return error.DirectoryFull;
+                dir.children[dir.count] = child;
+                dir.count += 1;
+            },
+            .device => return error.NotADirectory,
+        }
     }
 
-    pub fn findChild(self: *Vnode, name: []const u8) ?*Vnode {
-        for (self.children[0..self.child_count]) |child| {
-            if (std.mem.eql(u8, child.?.name, name)) return child;
-        }
-        return null;
+    pub fn findChild(self: *Vnode, child_name: []const u8) ?*Vnode {
+        return switch (self.data) {
+            .directory => |dir| {
+                for (dir.children[0..dir.count]) |child| {
+                    if (std.mem.eql(u8, child.?.name, child_name)) return child.?;
+                }
+                return null;
+            },
+            .device => null,
+        };
     }
 };
 
-var root_vnode = Vnode.init("", true);
+var root_vnode = Vnode.initDir("");
 
 pub fn getRoot() *Vnode {
     return &root_vnode;
 }
 
 pub fn lookup(path: []const u8) ?*Vnode {
+    if (std.mem.eql(u8, path, "/")) return &root_vnode;
     if (path.len == 0) return null;
-    if (path[0] != '/') return null; // Only absolute paths for now
 
     var current = &root_vnode;
     var iter = std.mem.tokenizeScalar(u8, path, '/');
-    
+
     while (iter.next()) |part| {
-        if (current.findChild(part)) |child| {
-            current = child;
-        } else {
-            return null;
-        }
+        current = current.findChild(part) orelse return null;
     }
     return current;
 }
 
 pub fn mount(path: []const u8, vnode: *Vnode) !void {
-    if (path.len == 0 or path[0] != '/') return error.InvalidPath;
+    const parent = lookup(path) orelse {
+        log.err("mount: target path '{s}' not found", .{path});
+        return error.ParentDirectoryNotFound;
+    };
+
+    if (parent.data != .directory) {
+        log.err("mount: target '{s}' is not a directory", .{path});
+        return error.NotADirectory;
+    }
+
+    try parent.addChild(vnode);
     
-    var current = &root_vnode;
-    var iter = std.mem.tokenizeScalar(u8, path, '/');
-    var last_part: ?[]const u8 = null;
-
-    // Traverse to the parent directory
-    while (iter.next()) |part| {
-        if (last_part) |lp| {
-             if (current.findChild(lp)) |child| {
-                current = child;
-            } else {
-                return error.ParentDirectoryNotFound;
-            }
-        }
-        last_part = part;
-    }
-
-    if (last_part) |lp| {
-        vnode.name = lp;
-        try current.addChild(vnode);
-        log.info("Mounted vnode at {s}", .{path});
-    } else {
-        return error.InvalidPath;
-    }
+    log.info("Mounted '{s}' into {s}", .{ vnode.name, path });
 }

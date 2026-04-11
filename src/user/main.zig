@@ -19,10 +19,8 @@ pub const Stream = struct {
 // --- Syscall Infrastructure ---
 
 const SyscallNum = enum(u64) {
-    open = 1,
-    get_interface_info = 2,
-    call_interface = 3,
-    exit = 4,
+    open = 0,
+    call = 1
 };
 
 /// Executes a raw syscall with 6 arguments
@@ -45,8 +43,8 @@ fn syscall6(num: SyscallNum, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
 
 // --- High Level User Wrappers ---
 
-pub fn open(path: []const u8) !u64 {
-    const res = syscall6(.open, @intFromPtr(path.ptr), path.len, 0, 0, 0, 0);
+pub fn open(path: []const u8, id: u64) !u64 {
+    const res = syscall6(.open, @intFromPtr(path.ptr), path.len, id, 0, 0, 0);
     if (res == 0xFFFFFFFFFFFFFFFF) return error.FileNotFound;
     return res;
 }
@@ -58,9 +56,8 @@ pub fn getInterfaceInfo(fd: u64, id: u64) !InterfaceInfo {
     return info;
 }
 
-pub fn streamWrite(fd: u64, interface_id: u64, data: []const u8) u64 {
-    // Mapping to: call_interface(fd, id, func_idx, arg1, arg2, arg3)
-    return syscall6(.call_interface, fd, interface_id, Stream.FN_WRITE, @intFromPtr(data.ptr), data.len, 0);
+pub fn streamWrite(fd: u64, data: []const u8) u64 {
+    return syscall6(.call, fd, Stream.FN_WRITE, @intFromPtr(data.ptr), data.len, 0, 0);
 }
 
 // --- Main Program Entry ---
@@ -70,20 +67,14 @@ pub export fn main() void {
     const hello_msg = "CBIP Syscall Demo: Hello from Userspace!\n";
 
     // 1. Open the serial vnode
-    const fd = open(device_path) catch {
+    const fd = open(device_path, Stream.ID) catch {
         // We can't use std.debug.print if we don't have a working OS env,
         // but for a demo, we assume success or hang.
         return;
     };
 
-    // 2. Query the interface to ensure "io.os.v1.Stream" is supported
-    const info = getInterfaceInfo(fd, Stream.ID) catch return;
-
-    // 3. Optional: Check if vtable has enough functions for our expected Stream version
-    if (info.vtable_len <= Stream.FN_WRITE) return;
-
     // 4. Perform the call
-    _ = streamWrite(fd, Stream.ID, hello_msg);
+    _ = streamWrite(fd, hello_msg);
 }
 
 export fn _start() noreturn {

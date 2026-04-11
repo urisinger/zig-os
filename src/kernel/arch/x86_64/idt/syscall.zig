@@ -5,19 +5,10 @@ const log = std.log.scoped(.syscall);
 const instr = @import("../instr.zig");
 
 const core = root.core;
-const syscalls = core.syscall;
+const syscall = core.syscall;
 
-var syscall_table: [6]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.{ .x86_64_sysv = .{} }) u64 = [6]?*const fn (u64, u64, u64, u64, u64, u64) callconv(.{ .x86_64_sysv = .{} }) u64{
-    &syscalls.testSyscall,
-    &syscalls.open,
-    &syscalls.get_interface_info,
-    &syscalls.call_interface,
-    &syscalls.testSyscall,
-    &syscalls.testSyscall,
-};
-
-export const syscall_table_ptr: [*]?*const fn (u64, u64, u64, u64, u64, u64) u64 = @ptrCast(&syscall_table[0]);
-export const syscall_table_len = syscall_table.len;
+export const syscall_table_ptr: [*]const ?*const fn (u64, u64, u64, u64, u64, u64) u64 = @ptrCast(&syscall.syscall_table[0]);
+export const syscall_table_len = syscall.syscall_table.len;
 
 export fn fallback_syscall() callconv(.c) u64 {
     return 0xFFFFFFFFFFFFFFFF;

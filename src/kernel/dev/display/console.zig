@@ -1,4 +1,5 @@
 const std = @import("std");
+const root = @import("root");
 
 const font = @embedFile("DEF_8X16.F16");
 const framebuffer = @import("framebuffer.zig");
@@ -22,8 +23,7 @@ pub fn init() void {
     const fb = &framebuffer.framebuffer;
 
     const size = (fb.pitch * fb.height) / (fb.bpp / 8);
-    const allocator = std.heap.page_allocator;
-    const pixels = allocator.alloc(Color, size) catch unreachable;
+    const pixels = root.mem.kernel.heap.allocator.alloc(Color, size) catch unreachable;
 
     @memset(pixels, Color.BLACK);
 

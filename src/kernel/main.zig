@@ -26,7 +26,6 @@ const scheduler = tasking.scheduler;
 const elf = tasking.exec.elf;
 
 pub const panic = klog.panic_handler;
-pub const os = core.os;
 
 const elf_code align(@alignOf(std.elf.Elf64_Ehdr)) = @embedFile("user_elf").*;
 
@@ -90,40 +89,70 @@ pub fn handler(arg: u64) i32 {
         return 32;
 }
 
+pub export fn _start() callconv(.c) noreturn {
+    arch.entry();
+    unreachable;
+}
+
 const vfs = core.vfs;
 const cbip = core.cbip;
 
 const Stream = struct {
-    write: *const fn (*anyopaque, [*]const u8, u64) callconv(.c) u64,
+    pub const NAME: []const u8 = "io.os.v1.Stream";
+    write: *const fn (ctx: *anyopaque, data_ptr: [*]const u8, data_len: u64) u64,
 };
 
-fn serial_write(_: *anyopaque, data_ptr: [*]const u8, data_len: u64) callconv(.c) u64 {
+// 2. Define the Driver Structure (Embedding the Vnode)
+const SerialPort = struct {
+    vnode: vfs.Vnode,
+    // Add hardware-specific fields here (e.g. base_addr: usize)
+
+    pub fn init(name: []const u8) SerialPort {
+        return .{
+            .vnode = vfs.Vnode.initDevice(name, getInterface),
+        };
+    }
+
+    // This is the pivot logic for this specific hardware
+    fn getInterface(vnode_ptr: *vfs.Vnode, id: u64) cbip.InterfaceResult {
+        // Recover the SerialPort pointer from the Vnode member
+        const self: *SerialPort = @fieldParentPtr("vnode", vnode_ptr);
+        
+        if (id == cbip.generateID(Stream)) {
+            return .{
+                .vtable = &serial_vtable,
+                .context = self, // The context is the SerialPort struct itself
+                .status = 0,
+            };
+        }
+        return .{ .vtable = null, .context = null, .status = 404 };
+    }
+};
+
+// 3. Implement the Interface Function
+fn serial_write(ctx: *anyopaque, data_ptr: [*]const u8, data_len: u64) u64 {
+    const self: *SerialPort = @ptrCast(@alignCast(ctx));
+    _ = self; 
+    
     const data = data_ptr[0..data_len];
-    dev.serial.puts(data);
+    dev.serial.puts(data); 
     return data.len;
 }
 
-var dev_vnode = vfs.Vnode.init("dev", true);
-var serial_vnode = vfs.Vnode.init("serial", false);
+var dev_vnode = vfs.Vnode.initDir("dev");
+var serial_dev = SerialPort.init("serial");
 
-const serial_vtable = [_]*const anyopaque{
-    @ptrCast(&serial_write),
-};
+const serial_vtable = cbip.flatten(Stream{
+    .write = serial_write,
+});
 
-fn setupCbipDemo() !void {
-    const stream_id = cbip.generateID("io.os.v1.Stream", Stream);
-    log.info("id: 0x{x}", .{stream_id});
-    const stream_canonical = cbip.getCanonicalString("io.os.v1.Stream", Stream);
+pub fn setupCbipDemo() !void {
+    // Announce the interface to the kernel's registry
+    try cbip.announce(Stream.NAME, cbip.generateID(Stream), cbip.getCanonicalString(Stream));
     
-    try cbip.announce("io.os.v1.Stream", stream_id, stream_canonical);
+    // Mount the structures
+    try vfs.mount("/", &dev_vnode); // Mount dev at root
+    try vfs.mount("/dev", &serial_dev.vnode); // Mount embedded vnode
     
-    try serial_vnode.cbip_vnode.bind(stream_id, &serial_vtable);
-    
-    try vfs.mount("/dev", &dev_vnode);
-    try vfs.mount("/dev/serial", &serial_vnode);
-}
-
-pub export fn _start() callconv(.c) noreturn {
-    arch.entry();
-    unreachable;
+    std.log.info("VFS initialized. /dev/serial is ready.", .{});
 }

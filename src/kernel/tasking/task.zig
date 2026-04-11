@@ -14,6 +14,7 @@ const vmm = mem.user.vmm;
 const VmAllocator = vmm.VmAllocator;
 const utils = root.common.utils;
 const pmm = mem.pmm;
+const vfs = core.vfs;
 const uheap = mem.user.heap;
 
 const core = root.core;
@@ -22,14 +23,19 @@ const cbip = core.cbip;
 pub const TaskType = enum { Kernel, User };
 pub const TaskState = enum { Runnable, Sleeping, Dead };
 
+const IFDEntry = struct {
+    vnode: *vfs.Vnode,
+    vtable: cbip.Vtable,
+};
+
 pub const Task = struct {
     kind: TaskType,
     state: TaskState,
     context: *Context,
     kernel_stack: u64,
-    kernel_stack_pages: usize, // track for freeing
+    kernel_stack_pages: usize,
 
-    vnodes: [32]?*cbip.Vnode = [_]?*cbip.Vnode{null} ** 32,
+    fd_table: [32]?IFDEntry = [_]?IFDEntry{null} ** 32,
 
     pub fn asUser(self: *Task) ?*UserTask {
         if (self.kind != .User) return null;
@@ -112,7 +118,7 @@ pub const UserTask = struct {
         self.base.kind = .User;
         self.base.state = .Runnable;
         self.base.kernel_stack_pages = kernel_stack_pages;
-        self.base.vnodes = [_]?*cbip.Vnode{null} ** 32;
+        self.base.fd_table = [_]?IFDEntry{null} ** 32;
 
         // Kernel stack
         const kstack_base = try pmm.allocatePageBlock(kernel_stack_pages, .@"1") + globals.hhdm_offset;
@@ -169,7 +175,7 @@ pub const KernelTask = struct {
         self.base.kind = .Kernel;
         self.base.state = .Runnable;
         self.base.kernel_stack_pages = kernel_stack_pages;
-        self.base.vnodes = [_]?*cbip.Vnode{null} ** 32;
+        self.base.fd_table = [_]?IFDEntry{null} ** 32;
 
         const kstack_base = try pmm.allocatePageBlock(kernel_stack_pages, .@"1") + globals.hhdm_offset;
         self.base.kernel_stack = kstack_base + kernel_stack_pages * utils.PAGE_SIZE;
