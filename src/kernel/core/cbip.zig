@@ -2,6 +2,24 @@ const std = @import("std");
 const root = @import("root");
 const log = std.log.scoped(.cbip);
 
+pub const Inode = struct {
+    ref_count: usize = 1,
+    
+    get_interface: *const fn (self: *Inode, id: u64) InterfaceResult,
+    
+    deinit_fn: *const fn (self: *Inode) void,
+
+    pub fn ref(self: *Inode) void {
+        _ = @atomicRmw(usize, &self.ref_count, .Add, 1, .seq_cst);
+    }
+
+    pub fn unref(self: *Inode) void {
+        if (@atomicRmw(usize, &self.ref_count, .Sub, 1, .seq_cst) == 1) {
+            self.deinit_fn(self);
+        }
+    }
+};
+
 pub const InterfaceID = u64;
 
 /// The Universal Function Signature for all interface calls (Kernel View).
@@ -18,7 +36,7 @@ pub const Vtable = []const GenericFn;
 /// The Result of an interface lookup.
 pub const InterfaceResult = struct {
     vtable: ?Vtable,
-    context: ?*anyopaque,
+    context: ?*Inode,
     status: u64 = 0,
 };
 

@@ -58,36 +58,37 @@ pub const Slab = struct {
     free_list: ?*FreeRegion,
 
     pub fn max_objects(mem_size: usize, obj_size: usize) usize {
-        return (mem_size - @sizeOf(Slab)) / obj_size;
+        const header_size = @sizeOf(Slab);
+        const first_obj_offset = std.mem.alignForward(usize, header_size, @alignOf(FreeRegion));
+
+        if (mem_size <= first_obj_offset) return 0;
+
+        return (mem_size - first_obj_offset) / obj_size;
     }
 
     pub fn init(memory: []u8, obj_size: usize) !*Slab {
-        log.info("obj_size: {d}", .{obj_size});
-        if (obj_size < @sizeOf(FreeRegion)) {
-            return error.ObjectTooSmall;
-        }
-
-        const slab_start = std.mem.alignForward(usize, @sizeOf(Slab), @alignOf(Slab));
-        if (memory.len < slab_start + obj_size) {
-            return error.SlabTooSmall;
-        }
-
         const slab: *Slab = @ptrCast(@alignCast(memory.ptr));
-        slab.memory = memory[slab_start..];
+
+        // 1. Ensure the first object starts AFTER the Slab struct
+        // and is properly aligned for the object type.
+        const header_size = @sizeOf(Slab);
+        const first_obj_offset = std.mem.alignForward(usize, header_size, @alignOf(FreeRegion));
+
+        // 2. The memory available for objects starts after the header
         slab.obj_size = obj_size;
         slab.inuse = 0;
         slab.next = null;
         slab.free_list = null;
 
-        // Build the free list in reverse order to maintain proper linking
-        var mem_index: usize = slab.memory.len;
-        while (mem_index >= obj_size) {
-            mem_index -= obj_size;
-            const region: *FreeRegion = @ptrCast(@alignCast(slab.memory.ptr + mem_index));
-
+        // 3. Populate free list using the offset
+        var offset = first_obj_offset;
+        while (offset + obj_size <= memory.len) {
+            const region: *FreeRegion = @ptrCast(@alignCast(&memory[offset]));
             region.magic = 0xDEADBEEF;
             region.next = slab.free_list;
             slab.free_list = region;
+
+            offset += obj_size;
         }
 
         return slab;
@@ -95,25 +96,33 @@ pub const Slab = struct {
 
     pub fn allocate(self: *Slab) ?[*]u8 {
         if (self.free_list) |region| {
+            // --- CORRUPTION CHECK ---
             if (region.magic != 0xDEADBEEF) {
+                log.err("\n\n!!! SLAB CORRUPTION DETECTED !!!", .{});
+                log.err("Slab: 0x{x} | Obj Size: {} | In-Use: {}", .{ @intFromPtr(self), self.obj_size, self.inuse });
+                log.err("Corrupted Region Address: 0x{x}", .{@intFromPtr(region)});
+                log.err("Expected Magic: 0xDEADBEEF | Actual: 0x{x}", .{region.magic});
+
                 @panic("Slab corruption detected: invalid magic number");
             }
+
+            // --- ALLOCATION LOGIC ---
             self.free_list = region.next;
             self.inuse += 1;
 
-            // Set the allocated region magic
-            const allocated: [*]u32 = @ptrCast(region);
-            @memset(allocated[0 .. self.obj_size / 4], 0xCAFEBABE);
+            const ptr: [*]u8 = @ptrCast(region);
 
-            return @ptrCast(region);
+            // Wipe the memory with the "In-Use" magic so we can detect leaks/corruption later
+            @memset(ptr[0..self.obj_size], 0xCA);
+            // We use 0xCA instead of @memset for u32 to ensure byte-perfect alignment safety
+
+            return ptr;
         }
         return null;
     }
 
     pub fn free(self: *Slab, ptr: [*]u8) bool {
-        log.info("freeing ptr: 0x{x}", .{@intFromPtr(ptr)});
         const region: *FreeRegion = @ptrCast(@alignCast(ptr));
-        // Clear the allocated memory before reusing it
 
         region.next = self.free_list;
         region.magic = 0xDEADBEEF;

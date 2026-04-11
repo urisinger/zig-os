@@ -11,3 +11,7 @@ pub const user = struct {
     pub const heap = @import("user/heap.zig");
     pub const vmm = @import("user/vmm.zig");
 };
+
+pub const allocator = kernel.heap.allocator;
+pub const get_slab_cache = kernel.heap.get_slab_cache;
+pub const SlabCacheTyped = kernel.heap.slab.SlabCacheTyped;

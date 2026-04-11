@@ -26,7 +26,6 @@ pub export fn open(path_ptr: u64, path_len: u64, interface: u64, _: u64, _: u64,
     };
 
     log.debug("hi", .{});
-    // 2. Pivot to the driver to get the requested interface (Stream, GPIO, etc.)
     const res = vnode.requestInterface(interface);
     
     // If the driver doesn't support this interface or is busy
